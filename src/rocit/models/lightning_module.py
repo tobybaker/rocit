@@ -15,7 +15,7 @@ from torchmetrics.classification import (
 )
 from torch.utils.data import Dataset, DataLoader
 
-class ROCITLightningModule(pl.LightningModule):
+class ROCITModel(pl.LightningModule):
     def __init__(
         self,
         model,
