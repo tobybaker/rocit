@@ -15,18 +15,22 @@ from torchmetrics.classification import (
 )
 from torch.utils.data import Dataset, DataLoader
 
+from rocit.models.model_architecture import ROCITClassifier
+
 class ROCITModel(pl.LightningModule):
     def __init__(
         self,
-        model,
-        lr: float,
-        warmup_steps: int,
+        model_dim:int,
+        model_heads:int,
+        model_layers:int,
+        lr: float| None=None,
+        warmup_steps: int| None = None,
         threshold: float = 0.5,
     ):
         super().__init__()
 
         # ---- Core components ----
-        self.model = model
+        self.model = ROCITClassifier(model_dim,model_heads,model_layers)
         self.lr = lr
         self.warmup_steps = warmup_steps
         self.threshold = threshold
@@ -51,7 +55,7 @@ class ROCITModel(pl.LightningModule):
         self.test_metrics = self.train_metrics.clone(prefix="test_")
 
         # Enables checkpoint re-loading
-        self.save_hyperparameters(ignore=["model"])
+        self.save_hyperparameters()
 
     def setup(self, stage=None):
         # datamodule is attached by the Trainer

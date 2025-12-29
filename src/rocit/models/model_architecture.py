@@ -43,23 +43,26 @@ class SparseEmbeddingBlock(nn.Module):
 
 
 class ROCITClassifier(nn.Module):
-    def __init__(self, emb, n_heads, n_blocks,seq_length=511):
+
+    SAMPLE_DISTRIBUTION_DIM:int = 19
+    CELL_MAP_DIM:int = 84
+    SCALE_CONSTANT:float = 0.05
+    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2):
         super().__init__()
 
-        self.sample_distribution_embedding = SparseEmbeddingBlock(19)
-        self.cell_map_embedding = SparseEmbeddingBlock(84)
+        self.sample_distribution_embedding = SparseEmbeddingBlock(self.SAMPLE_DISTRIBUTION_DIM)
+        self.cell_map_embedding = SparseEmbeddingBlock(self.CELL_MAP_DIM)
 
         self.emb = emb
         self.seq_length = seq_length
         self.n_heads = n_heads
-        self.scale_constant = 0.05
         self.pos_emb = nn.Embedding(seq_length, emb)
-        self.dropout=0.2
+        self.dropout=dropout_rate
 
 
-        self.class_vector = nn.Parameter(torch.randn(emb)*self.scale_constant)
+        self.class_vector = nn.Parameter(torch.randn(emb)*self.SCALE_CONSTANT)
         self.cell_type_embedder  = nn.Sequential(
-            nn.Linear(in_features=84, out_features=emb),
+            nn.Linear(in_features=self.CELL_MAP_DIM, out_features=emb),
             nn.Dropout(self.dropout),
             nn.GELU(),
             nn.Linear(in_features=emb, out_features=emb),
@@ -68,8 +71,9 @@ class ROCITClassifier(nn.Module):
             nn.Linear(in_features=emb, out_features=emb)
         )
 
+        #add two to input dimension for position and methylation probability
         self.methylation_embedder  = nn.Sequential(
-            nn.Linear(in_features=21, out_features=emb),
+            nn.Linear(in_features=self.SAMPLE_DISTRIBUTION_DIM+2, out_features=emb),
             nn.Dropout(self.dropout),
             nn.GELU(),
             nn.Linear(in_features=emb, out_features=emb),
@@ -100,7 +104,7 @@ class ROCITClassifier(nn.Module):
 
         pos_emb = self.pos_emb(torch.arange(input_vector.shape[1], device=input_vector.device))[None, :, :].expand_as(input_vector)
         
-        input_vector = input_vector + pos_emb*self.scale_constant
+        input_vector = input_vector + pos_emb*self.SCALE_CONSTANT
      
         class_emb = self.class_vector.view(1,1,-1).expand(input_vector.shape[0],-1,-1)
 

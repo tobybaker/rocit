@@ -6,13 +6,12 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 
 
-from rocit.models.lightning_module import ROCITModel
-from rocit.datamodule import ROCITDataModule,ReadDataset,EmbeddingStore
-
-from classifier import ROCITClassifier
-
+from rocit.models import ROCITModel,ROCITClassifier
+from rocit.data import ROCITDataModule,ReadDataset,EmbeddingStore
+from pathlib import Path
 @dataclass
 class TrainingParams:
     model_dim:int = 384
@@ -34,6 +33,17 @@ class ROCITTrainStore():
     val_dataset:ReadDataset
     test_dataset:ReadDataset
     embedding_sources:dict
+
+@dataclass
+class ROCITInferenceStore():
+    inference_dataset:ReadDataset
+    embedding_sources:dict
+
+@dataclass(frozen=True)
+class ROCITTrainResult():
+    best_checkpoint_path: Path
+    log_dir: Path
+    training_params:TrainingParams
 
 def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     if training_params is None:
@@ -58,9 +68,6 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
         filename="best-checkpoint",
     )
 
-    rocit_model = ROCITClassifier(training_params.model_dim,training_params.model_heads,training_params.model_layers)
-    rocit_model.set_embedding_context(rocit_dataset.embedding_sources)
-
     data_module = ROCITDataModule(rocit_dataset.train_dataset,rocit_dataset.test_dataset,rocit_dataset.val_dataset,training_params.batch_size)
     
     EPOCHS = training_params.max_epochs
@@ -68,11 +75,14 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     warmup_steps = training_params.warmup_steps
 
     model = ROCITModel(
-    model=rocit_model,
+    model_dim=training_params.model_dim,
+    model_heads=training_params.model_heads,
+    model_layers=training_params.model_layers,
     lr=training_params.learning_rate,
     warmup_steps=warmup_steps,
     threshold=training_params.probability_threshold,
     )
+    model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
     trainer = pl.Trainer(
     max_epochs=EPOCHS,
@@ -86,3 +96,17 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
+    best_checkpoint_path = Path(checkpoint_cb.best_model_path)
+    log_dir = Path(csv_logger.log_dir)
+    return ROCITTrainResult(best_checkpoint_path,log_dir)
+
+
+def predict(inference_dataset,training_result):
+    
+
+    rocit_model = ROCITClassifier(training_params.model_dim,training_params.model_heads,training_params.model_layers)
+    rocit_model.set_embedding_context(inference_dataset.embedding_sources)
+
+    
+    
+    return ROCITTrainResult(best_checkpoint_path,log_dir)

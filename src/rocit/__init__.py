@@ -1,6 +1,8 @@
-from rocit.pipeline import train, predict
+from rocit.pipeline import train,predict,ROCITInferenceStore,ROCITTrainStore
 
 __all__ = [
-    "train", 
+    "train",
     "predict",
+    "ROCITInferenceStore",
+    "ROCITTrainStore"
 ]
