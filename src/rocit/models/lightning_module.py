@@ -36,7 +36,7 @@ class ROCITModel(pl.LightningModule):
         self.threshold = threshold
         self.pos_weight = None 
 
-        self.loss_fn = BCEWithLogitsLoss()
+        self.loss_fn = BCEWithLogitsLoss(pos_weight=torch.tensor(1.0))
 
       
         metric_fns = {
