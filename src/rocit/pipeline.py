@@ -18,7 +18,7 @@ class TrainingParams:
     model_dim:int = 384
     model_heads:int = 6
     model_layers:int = 3
-    max_epochs:int = 1
+    max_epochs:int = 100
     warmup_steps:int = 100
     learning_rate:float = 1e-4
     probability_threshold:float = 0.5
@@ -100,7 +100,7 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     return ROCITTrainResult(best_checkpoint_path,log_dir)
 
 
-def predict(inference_datastore,training_result,inference_batch_size:int=256):
+def predict(inference_datastore,training_result,inference_batch_size:int=1024):
     
     model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
     model.model.set_embedding_context(inference_datastore.embedding_sources)

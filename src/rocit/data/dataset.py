@@ -74,14 +74,14 @@ class ReadDataset(Dataset):
 
     METHYLATION_SCALE = 256.0
 
-    def __init__(self, read_df,label_cols,key_cols,embedding_sources,max_len=511):
+    def __init__(self, read_df_store,label_cols,key_cols,embedding_sources,max_len=511):
 
         
         self.label_cols = label_cols
         self.max_len = max_len
-        self.key_cols = ['Sample_ID','Read_Index']
+        self.key_cols = key_cols
         self.embedding_index_cols = [embedding_source.index_col for embedding_source in embedding_sources.values()]
-        self.read_data = self._process_read_df(read_df,embedding_sources)
+        self.read_data = self._process_read_df_store(read_df_store,embedding_sources)
         
 
     def _validate_read_df(self, read_df: pl.DataFrame):
@@ -93,7 +93,6 @@ class ReadDataset(Dataset):
                 raise ValueError(f'{col} needs to be in read data')
 
         non_nullable_columns = ['Read_Index', 'Chromosome', 'Methylation', 'Read_Position']
-        
 
         for col in non_nullable_columns:
             if read_df[col].is_null().any():
@@ -112,11 +111,11 @@ class ReadDataset(Dataset):
         if 'Sample_ID' in read_df.columns:
             key_cols.append('Sample_ID')
         
-
         if read_df.select(key_cols).is_duplicated().any():
             raise ValueError(f'Read data should be unique up to {"-".join(key_cols)}')
         
-    def _process_read_df(self,read_df:pd.DataFrame,embedding_sources):
+    def _process_read_df(self,read_df:pl.DataFrame,embedding_sources,read_data):
+        read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
         self._validate_read_df(read_df)
 
         drop_cols = ['Supplementary_Alignment','Read_Count','Strand']
@@ -129,14 +128,17 @@ class ReadDataset(Dataset):
         n_indexes =read_df.select( pl.struct(self.key_cols).n_unique()).item()
         read_groups = read_df.partition_by(self.key_cols, maintain_order=False)
     
-        read_data = {}
-        for i, read_index_df in tqdm(enumerate(read_groups),desc='Loading reads'):
-            read_data[i] = self._get_processed_read_index_data(read_index_df)
-            
         
+        for i, read_index_df in tqdm(enumerate(read_groups),desc='Loading reads'):
+            read_data[len(read_data)] = self._get_processed_read_index_data(read_index_df)
+  
+
+    def _process_read_df_store(self,read_df_store,embedding_sources):
+        read_df_store = read_df_store if isinstance(read_df_store, list) else [read_df_store]
+        read_data = {}
+        for read_df in read_df_store:
+            self._process_read_df(read_df,embedding_sources,read_data)
         return read_data
-
-
 
     def _get_processed_read_index_data(self, read_index_df: pl.DataFrame) -> dict:
         processed = {}
@@ -150,17 +152,17 @@ class ReadDataset(Dataset):
         
         # Column arithmetic using expressions, then extract to numpy
         read_pos_col = read_index_df.get_column('Read_Position')
-        read_positions = ((read_pos_col - read_pos_col.min()) / 20000.0 - 0.5).cast(pl.Float32)
-        processed['read_position'] = torch.from_numpy(read_positions.to_numpy())
+        #read_positions = ((read_pos_col - read_pos_col.min()) / 20000.0 - 0.5).cast(pl.Float32)
+        processed['read_position'] = torch.from_numpy(read_pos_col.cast(pl.Int32).to_numpy())
         
         # Direct cast and numpy conversion
         processed['position'] = torch.from_numpy(
-            read_index_df.get_column('Position').cast(pl.Float64).to_numpy()
+            read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
         )
         
         meth_col = read_index_df.get_column('Methylation')
-        read_methylation = (meth_col / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).cast(pl.Float32)
-        processed['methylation'] = torch.from_numpy(read_methylation.to_numpy())
+        #read_methylation = (meth_col / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).cast(pl.Float32)
+        processed['methylation'] = torch.from_numpy(meth_col.to_numpy())
         
         for embedding_index_col in self.embedding_index_cols:
             processed[embedding_index_col.lower()] = torch.from_numpy(
@@ -221,7 +223,9 @@ class ReadDataset(Dataset):
         tensor_cols = ['methylation','read_position','position'] + [e.lower() for e in self.embedding_index_cols]
         for col in tensor_cols:
             item_data[col.lower()] = self.apply_tensor_subsample_and_pad(processed_read_data[col],downsample_indices)
-
+        item_data['methylation']  = (item_data['methylation'] / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).float()
+        item_data['read_position']  = ((item_data['read_position'].float() - torch.min(item_data['read_position'].float())) / 20000.0 - 0.5)
+        
         item_data['attention_mask'] = attention_mask
         
         return item_data
