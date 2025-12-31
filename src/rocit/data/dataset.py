@@ -73,6 +73,7 @@ class EmbeddingStore:
 class ReadDataset(Dataset):
 
     METHYLATION_SCALE = 256.0
+    BASE_READ_LENGTH = 20000.0
 
     def __init__(self, read_df_store,label_cols,key_cols,embedding_sources,max_len=511):
 
@@ -147,30 +148,21 @@ class ReadDataset(Dataset):
         for label_col in self.label_cols:
             processed[label_col.lower()] = read_index_df.get_column(label_col)[0]
         
-        # Height is the polars equivalent of len() for row count
-        processed['n_cpgs'] = read_index_df.height
         
-        # Column arithmetic using expressions, then extract to numpy
-        read_pos_col = read_index_df.get_column('Read_Position')
-        #read_positions = ((read_pos_col - read_pos_col.min()) / 20000.0 - 0.5).cast(pl.Float32)
-        processed['read_position'] = torch.from_numpy(read_pos_col.cast(pl.Int32).to_numpy())
+        processed['n_cpgs'] = read_index_df.height
+        processed['read_position'] = read_index_df.get_column('Read_Position').cast(pl.UInt16).to_numpy()
         
         # Direct cast and numpy conversion
-        processed['position'] = torch.from_numpy(
-            read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
-        )
-        
-        meth_col = read_index_df.get_column('Methylation')
-        #read_methylation = (meth_col / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).cast(pl.Float32)
-        processed['methylation'] = torch.from_numpy(meth_col.to_numpy())
+        processed['position'] =  read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
+       
+        processed['methylation'] = read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
         
         for embedding_index_col in self.embedding_index_cols:
-            processed[embedding_index_col.lower()] = torch.from_numpy(
-                read_index_df.get_column(embedding_index_col).to_numpy()
-            )
+            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy().astype(np.int32)
+            
             
         return processed
-        def __len__(self):
+    def __len__(self):
             return len(self.read_data)
 
     def get_downsample_indices(self,seq_len: int):
@@ -222,13 +214,13 @@ class ReadDataset(Dataset):
         
         tensor_cols = ['methylation','read_position','position'] + [e.lower() for e in self.embedding_index_cols]
         for col in tensor_cols:
-            item_data[col.lower()] = self.apply_tensor_subsample_and_pad(processed_read_data[col],downsample_indices)
+            
+            item_data[col.lower()] = self.apply_tensor_subsample_and_pad(torch.from_numpy(processed_read_data[col]).long(),downsample_indices)
         item_data['methylation']  = (item_data['methylation'] / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).float()
-        item_data['read_position']  = ((item_data['read_position'].float() - torch.min(item_data['read_position'].float())) / 20000.0 - 0.5)
+        item_data['read_position']  = ((item_data['read_position'].float() - (item_data['read_position'][0].float())) / self.BASE_READ_LENGTH - 0.5)
         
         item_data['attention_mask'] = attention_mask
         
         return item_data
-    def __len__(self):
-        return len(self.read_data)
+    
     
