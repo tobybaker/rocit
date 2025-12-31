@@ -8,8 +8,10 @@ import torch.nn.functional as F
 from pathlib import Path
 from dataclasses import dataclass
 
+from datasets import Dataset as HFDataset, Features, Sequence, Value
 
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset as TorchDataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 class EmbeddingStore:
@@ -70,10 +72,7 @@ class EmbeddingStore:
         embedding_vector = torch.from_numpy(embedding_vector).float()
         return embedding_vector
 
-class ReadDataset(Dataset):
-
-    METHYLATION_SCALE = 256.0
-    BASE_READ_LENGTH = 20000.0
+class ReadDatasetBuilder(TorchDataset):
 
     def __init__(self, read_df_store,label_cols,key_cols,embedding_sources,max_len=511):
 
@@ -81,8 +80,9 @@ class ReadDataset(Dataset):
         self.label_cols = label_cols
         self.max_len = max_len
         self.key_cols = key_cols
+        self.embedding_sources = embedding_sources
         self.embedding_index_cols = [embedding_source.index_col for embedding_source in embedding_sources.values()]
-        self.read_data = self._process_read_df_store(read_df_store,embedding_sources)
+        self.read_df_store = read_df_store
         
 
     def _validate_read_df(self, read_df: pl.DataFrame):
@@ -115,32 +115,6 @@ class ReadDataset(Dataset):
         if read_df.select(key_cols).is_duplicated().any():
             raise ValueError(f'Read data should be unique up to {"-".join(key_cols)}')
         
-    def _process_read_df(self,read_df:pl.DataFrame,embedding_sources,read_data):
-        read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
-        self._validate_read_df(read_df)
-
-        drop_cols = ['Supplementary_Alignment','Read_Count','Strand']
-        read_df = read_df.drop(drop_cols,strict=False)
-        
-        for source_name,embedding_source in embedding_sources.items():
-            read_df = embedding_source.merge_with_read_df(read_df)
-        
-        
-        n_indexes =read_df.select( pl.struct(self.key_cols).n_unique()).item()
-        read_groups = read_df.partition_by(self.key_cols, maintain_order=False)
-    
-        
-        for i, read_index_df in tqdm(enumerate(read_groups),desc='Loading reads'):
-            read_data[len(read_data)] = self._get_processed_read_index_data(read_index_df)
-  
-
-    def _process_read_df_store(self,read_df_store,embedding_sources):
-        read_df_store = read_df_store if isinstance(read_df_store, list) else [read_df_store]
-        read_data = {}
-        for read_df in read_df_store:
-            self._process_read_df(read_df,embedding_sources,read_data)
-        return read_data
-
     def _get_processed_read_index_data(self, read_index_df: pl.DataFrame) -> dict:
         processed = {}
         
@@ -150,20 +124,84 @@ class ReadDataset(Dataset):
         
         
         processed['n_cpgs'] = read_index_df.height
-        processed['read_position'] = read_index_df.get_column('Read_Position').cast(pl.UInt16).to_numpy()
+        processed['methylation'] = read_index_df.get_column('Methylation').cast(pl.UInt16).to_numpy()
         
-        # Direct cast and numpy conversion
-        processed['position'] =  read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
+        # Direct cast and numpy conversion - missing reference positions are mapped to -1
+        processed['position'] =  read_index_df.get_column('Position').fill_null(-1).cast(pl.Int32).to_numpy()
        
-        processed['methylation'] = read_index_df.get_column('Position').cast(pl.Int32).to_numpy()
+        processed['read_position'] = read_index_df.get_column('Read_Position').cast(pl.Int32).to_numpy()
         
         for embedding_index_col in self.embedding_index_cols:
-            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy().astype(np.int32)
+            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()
             
             
         return processed
-    def __len__(self):
-            return len(self.read_data)
+    
+        
+    def _process_read_df(self,read_df:pl.DataFrame):
+        read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
+        self._validate_read_df(read_df)
+
+        drop_cols = ['Supplementary_Alignment','Read_Count','Strand']
+        read_df = read_df.drop(drop_cols,strict=False)
+        
+        for source_name,embedding_source in self.embedding_sources.items():
+            read_df = embedding_source.merge_with_read_df(read_df)
+        
+        
+        n_indexes =read_df.select( pl.struct(self.key_cols).n_unique()).item()
+        read_groups = read_df.partition_by(self.key_cols, maintain_order=False)
+    
+        
+        for i, read_index_df in enumerate(read_groups):
+            yield self._get_processed_read_index_data(read_index_df)
+  
+
+    def _read_generator(self):
+        read_df_store = self.read_df_store if isinstance(self.read_df_store, list) else [self.read_df_store]
+        read_data = {}
+        for read_df in read_df_store:
+            for read_index_data in self._process_read_df(read_df):
+                yield read_index_data
+        
+    def build(
+        self,
+        cache_dir: Optional[str] = '/scratch/',
+        num_proc: Optional[int] = None,
+        fingerprint: Optional[str] = None,
+     ):
+        
+        hf_dataset =  HFDataset.from_generator(
+            self._read_generator,
+            cache_dir=cache_dir,
+            num_proc=num_proc,
+            fingerprint=fingerprint,
+            split='reads'
+        )
+        return ReadDataset(
+            hf_dataset=hf_dataset,
+            label_cols=self.label_cols,
+            embedding_index_cols=self.embedding_index_cols
+        )
+    
+    
+
+class ReadDataset(TorchDataset):
+
+    METHYLATION_SCALE = 256.0
+    BASE_READ_LENGTH = 20000.0
+
+    def __init__(self, hf_dataset,label_cols,embedding_index_cols,max_len=511):
+
+        self.hf_dataset = hf_dataset
+        self.label_cols = label_cols
+        self.max_len = max_len
+        self.embedding_index_cols =embedding_index_cols
+        
+        
+    def __len__(self) -> int:
+        return len(self.hf_dataset)
+    
 
     def get_downsample_indices(self,seq_len: int):
         
@@ -203,7 +241,7 @@ class ReadDataset(Dataset):
         return tensor
 
     def __getitem__(self, idx):
-        processed_read_data = self.read_data[idx]
+        processed_read_data = self.hf_dataset[idx]
         downsample_indices = self.get_downsample_indices(processed_read_data['n_cpgs'])
         attention_mask = self.get_attention_mask(processed_read_data['n_cpgs'],downsample_indices)
 
@@ -211,16 +249,14 @@ class ReadDataset(Dataset):
 
         for col in self.label_cols:
             item_data[col.lower()] = processed_read_data[col.lower()]
-        
+
         tensor_cols = ['methylation','read_position','position'] + [e.lower() for e in self.embedding_index_cols]
         for col in tensor_cols:
             
-            item_data[col.lower()] = self.apply_tensor_subsample_and_pad(torch.from_numpy(processed_read_data[col]).long(),downsample_indices)
+            item_data[col.lower()] = self.apply_tensor_subsample_and_pad(torch.tensor(processed_read_data[col]).long(),downsample_indices)
         item_data['methylation']  = (item_data['methylation'] / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).float()
         item_data['read_position']  = ((item_data['read_position'].float() - (item_data['read_position'][0].float())) / self.BASE_READ_LENGTH - 0.5)
         
         item_data['attention_mask'] = attention_mask
         
         return item_data
-    
-    
