@@ -6,7 +6,7 @@ import torchmetrics
 from torch.utils.data import Dataset, DataLoader
 class ROCITDataModule(pl.LightningDataModule):
 
-    NUM_WORKERS =0
+    NUM_WORKERS =16
     def __init__(
         self,
         train_dataset: Dataset,
