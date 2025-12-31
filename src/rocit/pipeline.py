@@ -111,7 +111,7 @@ def predict(inference_datastore,training_result,inference_batch_size:int=1024):
             batch_size=inference_batch_size,
             shuffle=False,
             drop_last=False,
-            num_workers=0,
+            num_workers=16,
         )
 
     predictions = trainer.predict(model, dataloaders=predict_loader)
