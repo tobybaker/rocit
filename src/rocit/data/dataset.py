@@ -14,6 +14,7 @@ from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from typing import Optional
 class EmbeddingStore:
     def __init__(self,name,embedding_df,key_cols):
         self.name = name
@@ -249,7 +250,8 @@ class ReadDataset(TorchDataset):
 
         for col in self.label_cols:
             item_data[col.lower()] = processed_read_data[col.lower()]
-
+        if 'tumor_read' in item_data:
+            item_data['tumor_read'] = torch.tensor(item_data['tumor_read']).float()
         tensor_cols = ['methylation','read_position','position'] + [e.lower() for e in self.embedding_index_cols]
         for col in tensor_cols:
             
