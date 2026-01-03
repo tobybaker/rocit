@@ -5,6 +5,7 @@ class SparseEmbeddingBlock(nn.Module):
         super().__init__()
         self.dim = dim
         self.missing_idx = missing_idx
+        print(self.dim)
         self.impute_values = nn.Parameter(torch.zeros((dim,)))
         self.missing_vector = nn.Parameter(torch.randn(1, dim) * 0.02)
         
@@ -44,14 +45,14 @@ class SparseEmbeddingBlock(nn.Module):
 
 class ROCITClassifier(nn.Module):
 
-    SAMPLE_DISTRIBUTION_DIM:int = 19
-    CELL_MAP_DIM:int = 84
     SCALE_CONSTANT:float = 0.05
-    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2):
+    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2,sample_distribution_dim=19,cell_map_dim=84):
         super().__init__()
 
-        self.sample_distribution_embedding = SparseEmbeddingBlock(self.SAMPLE_DISTRIBUTION_DIM)
-        self.cell_map_embedding = SparseEmbeddingBlock(self.CELL_MAP_DIM)
+        self.sample_distribution_dim = sample_distribution_dim
+        self.cell_map_dim = cell_map_dim
+        self.sample_distribution_embedding = SparseEmbeddingBlock(self.sample_distribution_dim)
+        self.cell_map_embedding = SparseEmbeddingBlock(self.cell_map_dim)
 
         self.emb = emb
         self.seq_length = seq_length
@@ -62,7 +63,7 @@ class ROCITClassifier(nn.Module):
 
         self.class_vector = nn.Parameter(torch.randn(emb)*self.SCALE_CONSTANT)
         self.cell_type_embedder  = nn.Sequential(
-            nn.Linear(in_features=self.CELL_MAP_DIM, out_features=emb),
+            nn.Linear(in_features=self.cell_map_dim, out_features=emb),
             nn.Dropout(self.dropout),
             nn.GELU(),
             nn.Linear(in_features=emb, out_features=emb),
@@ -73,7 +74,7 @@ class ROCITClassifier(nn.Module):
 
         #add two to input dimension for position and methylation probability
         self.methylation_embedder  = nn.Sequential(
-            nn.Linear(in_features=self.SAMPLE_DISTRIBUTION_DIM+2, out_features=emb),
+            nn.Linear(in_features=self.sample_distribution_dim+2, out_features=emb),
             nn.Dropout(self.dropout),
             nn.GELU(),
             nn.Linear(in_features=emb, out_features=emb),
@@ -89,8 +90,8 @@ class ROCITClassifier(nn.Module):
         self.to_output_probability= nn.Sequential(nn.Dropout(self.dropout),nn.Linear(in_features=emb, out_features=1))
 
     def set_embedding_context(self, embedding_sources: dict):
-        self.sample_distribution_embedding.set_context(embedding_sources['Sample_Distribution'])
-        self.cell_map_embedding.set_context(embedding_sources['Cell_Map'])
+        self.sample_distribution_embedding.set_context(embedding_sources['sample_distribution'])
+        self.cell_map_embedding.set_context(embedding_sources['cell_map'])
         
 
     def forward(self, methylation,read_position,sample_distribution_index,cell_map_index,attention_mask,**kwargs):

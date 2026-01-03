@@ -26,11 +26,13 @@ class ROCITModel(pl.LightningModule):
         lr: float| None=None,
         warmup_steps: int| None = None,
         threshold: float = 0.5,
+        sample_distribution_dim:int=19,
+        cell_map_dim:int=84
     ):
         super().__init__()
 
         # ---- Core components ----
-        self.model = ROCITClassifier(model_dim,model_heads,model_layers)
+        self.model = ROCITClassifier(model_dim,model_heads,model_layers,sample_distribution_dim=sample_distribution_dim,cell_map_dim=cell_map_dim)
         self.lr = lr
         self.warmup_steps = warmup_steps
         self.threshold = threshold

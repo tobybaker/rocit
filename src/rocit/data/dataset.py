@@ -18,7 +18,7 @@ from typing import Optional
 class EmbeddingStore:
     def __init__(self,name,embedding_df,key_cols):
         self.name = name
-        self.index_col = f"{self.name}_Index"
+        self.index_col = f"{self.name}_index"
         self.key_cols = key_cols
         self.embedding_df = self._load_embedding_df(embedding_df)
         self.index_df = self._create_index_df()
@@ -87,31 +87,31 @@ class ReadDatasetBuilder(TorchDataset):
         
 
     def _validate_read_df(self, read_df: pl.DataFrame):
-        required_cols = ['Chromosome', 'Position', 'Read_Position', 'Methylation', 'Read_Index']
+        required_cols = ['chromosome', 'position', 'read_position', 'methylation', 'read_index']
         
 
         for col in required_cols:
             if col not in read_df.columns:
                 raise ValueError(f'{col} needs to be in read data')
 
-        non_nullable_columns = ['Read_Index', 'Chromosome', 'Methylation', 'Read_Position']
+        non_nullable_columns = ['read_index', 'chromosome', 'methylation', 'read_position']
 
         for col in non_nullable_columns:
             if read_df[col].is_null().any():
                 raise ValueError(f'{col} should not have any NA values')
 
 
-        if read_df['Methylation'].dtype not in pl.INTEGER_DTYPES:
+        if read_df['methylation'].dtype not in pl.INTEGER_DTYPES:
             raise ValueError('Methylation column should be integer')
 
 
-        if not read_df['Methylation'].is_between(0, 255).all():
+        if not read_df['methylation'].is_between(0, 255).all():
             raise ValueError('Methylation column should only have values between 0 and 255')
 
 
-        key_cols = ['Read_Index', 'Read_Position']
-        if 'Sample_ID' in read_df.columns:
-            key_cols.append('Sample_ID')
+        key_cols = ['read_index', 'read_position']
+        if 'sample_id' in read_df.columns:
+            key_cols.append('sample_id')
         
         if read_df.select(key_cols).is_duplicated().any():
             raise ValueError(f'Read data should be unique up to {"-".join(key_cols)}')
@@ -125,12 +125,12 @@ class ReadDatasetBuilder(TorchDataset):
         
         
         processed['n_cpgs'] = read_index_df.height
-        processed['methylation'] = read_index_df.get_column('Methylation').cast(pl.UInt16).to_numpy()
+        processed['methylation'] = read_index_df.get_column('methylation').cast(pl.UInt16).to_numpy()
         
         # Direct cast and numpy conversion - missing reference positions are mapped to -1
-        processed['position'] =  read_index_df.get_column('Position').fill_null(-1).cast(pl.Int32).to_numpy()
+        processed['position'] =  read_index_df.get_column('position').fill_null(-1).cast(pl.Int32).to_numpy()
        
-        processed['read_position'] = read_index_df.get_column('Read_Position').cast(pl.Int32).to_numpy()
+        processed['read_position'] = read_index_df.get_column('read_position').cast(pl.Int32).to_numpy()
         
         for embedding_index_col in self.embedding_index_cols:
             processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()
@@ -143,7 +143,7 @@ class ReadDatasetBuilder(TorchDataset):
         read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
         self._validate_read_df(read_df)
 
-        drop_cols = ['Supplementary_Alignment','Read_Count','Strand']
+        drop_cols = ['supplementary_alignment','read_count','strand']
         read_df = read_df.drop(drop_cols,strict=False)
         
         for source_name,embedding_source in self.embedding_sources.items():
@@ -249,13 +249,13 @@ class ReadDataset(TorchDataset):
         item_data = {}
 
         for col in self.label_cols:
-            item_data[col.lower()] = processed_read_data[col.lower()]
+            item_data[col] = processed_read_data[col]
         if 'tumor_read' in item_data:
             item_data['tumor_read'] = torch.tensor(item_data['tumor_read']).float()
-        tensor_cols = ['methylation','read_position','position'] + [e.lower() for e in self.embedding_index_cols]
+        tensor_cols = ['methylation','read_position','position'] + [e for e in self.embedding_index_cols]
         for col in tensor_cols:
             
-            item_data[col.lower()] = self.apply_tensor_subsample_and_pad(torch.tensor(processed_read_data[col]).long(),downsample_indices)
+            item_data[col] = self.apply_tensor_subsample_and_pad(torch.tensor(processed_read_data[col]).long(),downsample_indices)
         item_data['methylation']  = (item_data['methylation'] / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).float()
         item_data['read_position']  = ((item_data['read_position'].float() - (item_data['read_position'][0].float())) / self.BASE_READ_LENGTH - 0.5)
         

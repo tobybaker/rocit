@@ -26,6 +26,8 @@ class TrainingParams:
     n_log_steps:int=  50
     early_stopping_patience:int = 5
     batch_size:int = 256
+    cell_map_dim:int=84
+    sample_distribution_dim:int=19
 
 @dataclass
 class ROCITTrainStore():
@@ -78,6 +80,8 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     lr=training_params.learning_rate,
     warmup_steps=warmup_steps,
     threshold=training_params.probability_threshold,
+    sample_distribution_dim=training_params.sample_distribution_dim,
+    cell_map_dim=training_params.cell_map_dim
     )
     model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
