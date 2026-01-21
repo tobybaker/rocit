@@ -19,7 +19,6 @@ def run_general_variant_qc(variant_table: pl.DataFrame, min_variant_reads: int =
 
     return True
 
-
 def run_phasing_qc(variant_table,min_p_value:float=0.1):
     
     purity = variant_table['purity'][0]
@@ -35,7 +34,6 @@ def run_phasing_qc(variant_table,min_p_value:float=0.1):
     if p_value<min_p_value:
         return False
     return True
-
 
 def run_all_copies_qc(variant_table,min_p_value:float=0.1):
   
@@ -63,7 +61,7 @@ def run_all_copies_qc(variant_table,min_p_value:float=0.1):
         return False
 
     return True
-def get_tumor_reads_with_snv_labels(pretrain_data,min_block_size=5e5):
+def get_tumor_labelled_reads(pretrain_data,min_block_size=5e5):
 
     labelled_variants = variant_processing.load_labelled_variants(pretrain_data)
     labelled_variants = labelled_variants.filter(pl.col('cluster_label')!='fail')
@@ -85,7 +83,7 @@ def get_tumor_reads_with_snv_labels(pretrain_data,min_block_size=5e5):
             continue
         #if variant is generally passes qc, add to tumor read store
         snv_containing_reads = snv_labelled_reads.filter(pl.col('contains_snv'))
-        tumor_reads = snv_containing_reads.select('read_index').with_columns(pl.lit(True).alias('tumor_read'))
+        tumor_reads = snv_containing_reads.select(['chromosome','read_index']).with_columns(pl.lit(True).alias('tumor_read'))
         
         read_store.append(tumor_reads)
         all_copies_qc = run_all_copies_qc(snv_labelled_reads)
@@ -94,9 +92,9 @@ def get_tumor_reads_with_snv_labels(pretrain_data,min_block_size=5e5):
             variant_haplotype = snv_containing_reads['haplotag'][0]
             non_tumor_reads =  snv_labelled_reads.filter((~pl.col('contains_snv')) & (pl.col('haplotag')==variant_haplotype))
             
-            non_tumor_reads = non_tumor_reads.select('read_index').with_columns(pl.lit(False).alias('tumor_read'))
+            non_tumor_reads = non_tumor_reads.select(['chromosome','read_index']).with_columns(pl.lit(False).alias('tumor_read'))
             
             read_store.append(non_tumor_reads)
-        if len(read_store)>200:
+        if len(read_store)>20:
             break
     return pl.concat(read_store)

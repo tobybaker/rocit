@@ -1,7 +1,7 @@
 import pickle
 import polars as pl
 import numpy as np
-from rocit.preprocessing import snv_data_labeller
+from rocit.preprocessing import snv_data_labeller,loh_data_labeller
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -33,8 +33,10 @@ class ROCITPreTrainData:
 
 def make_read_labels(pretrain_data):
 
-    snv_labelled_reads = snv_data_labeller.get_tumor_reads_with_snv_labels(pretrain_data)
+    snv_labelled_reads = snv_data_labeller.get_tumor_labelled_reads(pretrain_data)
     print(snv_labelled_reads)
+    loh_labelled_reads = loh_data_labeller.get_tumor_labelled_reads(pretrain_data)
+    print(loh_labelled_reads)
     exit()
 
     return read_labels

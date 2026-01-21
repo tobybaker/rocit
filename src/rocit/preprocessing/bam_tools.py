@@ -1,6 +1,40 @@
 import polars as pl
 import pysam
 
+def should_filter_read(read) -> bool:
+
+    if read.is_unmapped:
+        return True
+
+    if read.is_secondary:
+        return True
+
+    if read.is_supplementary:
+        return True
+
+    if read.is_qcfail:
+        return True
+
+    if read.is_duplicate:
+        return True
+
+    return False
+def get_reads_from_cn_row(region_row,bam_filepath):
+    read_data =[]
+
+    with pysam.AlignmentFile(bam_filepath, "rb") as bam_file:
+        for read in bam_file.fetch(region_row['chromosome'],region_row['segment_start'],region_row['segment_end']):
+
+            if should_filter_read(read):
+                continue
+            read_entry = {'read_index':read.query_name,'chromosome':read.reference_name}
+            reference_positions = read.get_reference_positions()
+            read_entry['read_start'] = min(reference_positions)
+            read_entry['read_end'] = max(reference_positions)
+            
+            read_data.append(read_entry)
+            
+    return pl.DataFrame(read_data)
 def pileup_read_contains_snv(pileup_read,vcf_row):
     
 
