@@ -5,7 +5,6 @@ class SparseEmbeddingBlock(nn.Module):
         super().__init__()
         self.dim = dim
         self.missing_idx = missing_idx
-        print(self.dim)
         self.impute_values = nn.Parameter(torch.zeros((dim,)))
         self.missing_vector = nn.Parameter(torch.randn(1, dim) * 0.02)
         
@@ -46,11 +45,12 @@ class SparseEmbeddingBlock(nn.Module):
 class ROCITClassifier(nn.Module):
 
     SCALE_CONSTANT:float = 0.05
-    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2,sample_distribution_dim=19,cell_map_dim=84):
+    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2,sample_distribution_dim=19,cell_map_dim=84,noise_level=0.02):
         super().__init__()
 
         self.sample_distribution_dim = sample_distribution_dim
         self.cell_map_dim = cell_map_dim
+        
         self.sample_distribution_embedding = SparseEmbeddingBlock(self.sample_distribution_dim)
         self.cell_map_embedding = SparseEmbeddingBlock(self.cell_map_dim)
 
@@ -59,6 +59,8 @@ class ROCITClassifier(nn.Module):
         self.n_heads = n_heads
         self.pos_emb = nn.Embedding(seq_length, emb)
         self.dropout=dropout_rate
+
+        self.noise_level = noise_level
 
 
         self.class_vector = nn.Parameter(torch.randn(emb)*self.SCALE_CONSTANT)
@@ -100,6 +102,10 @@ class ROCITClassifier(nn.Module):
         
         position_methylation_sample= self.sample_distribution_embedding(sample_distribution_index)
         
+        if self.training:
+            cell_type_methylation_sample += torch.randn_like(cell_type_methylation_sample)*self.noise_level
+            position_methylation_sample += torch.randn_like(position_methylation_sample)*self.noise_level
+            methylation += torch.randn_like(methylation)*self.noise_level
         
         input_vector = self.cell_type_embedder(cell_type_methylation_sample) + self.methylation_embedder(torch.cat([position_methylation_sample,methylation.unsqueeze(-1),read_position.unsqueeze(-1)],dim=-1))
 

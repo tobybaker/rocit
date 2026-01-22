@@ -27,12 +27,13 @@ class ROCITModel(pl.LightningModule):
         warmup_steps: int| None = None,
         threshold: float = 0.5,
         sample_distribution_dim:int=19,
-        cell_map_dim:int=84
+        cell_map_dim:int=84,
+        noise_level:float=0.02
     ):
         super().__init__()
 
         # ---- Core components ----
-        self.model = ROCITClassifier(model_dim,model_heads,model_layers,sample_distribution_dim=sample_distribution_dim,cell_map_dim=cell_map_dim)
+        self.model = ROCITClassifier(model_dim,model_heads,model_layers,sample_distribution_dim=sample_distribution_dim,cell_map_dim=cell_map_dim,noise_level=noise_level)
         self.lr = lr
         self.warmup_steps = warmup_steps
         self.threshold = threshold
@@ -134,13 +135,13 @@ class ROCITModel(pl.LightningModule):
         probs = torch.sigmoid(logits)
 
         return_dict= {
-            "Sample_ID": batch['sample_id'],
-            "Read_Index": batch['read_index'],
-            "Chromosome": batch['chromosome'],
-            "Tumor_Probability": probs.numpy(force=True)
+            "sample_id": batch['sample_id'],
+            "read_index": batch['read_index'],
+            "chromosome": batch['chromosome'],
+            "tumor_probability": probs.numpy(force=True)
         }
         if 'tumor_read' in batch:
-            return_dict['Tumor_Read'] = batch['tumor_read'].bool().numpy(force=True)
+            return_dict['tumor_read'] = batch['tumor_read'].bool().numpy(force=True)
         return return_dict
 
     
