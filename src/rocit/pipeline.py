@@ -28,6 +28,7 @@ class TrainingParams:
     batch_size:int = 256
     cell_map_dim:int=84
     sample_distribution_dim:int=19
+    noise_level:float=0.02
 
 @dataclass
 class ROCITTrainStore():
@@ -81,7 +82,8 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     warmup_steps=warmup_steps,
     threshold=training_params.probability_threshold,
     sample_distribution_dim=training_params.sample_distribution_dim,
-    cell_map_dim=training_params.cell_map_dim
+    cell_map_dim=training_params.cell_map_dim,
+    noise_level=training_params.noise_level
     )
     model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
