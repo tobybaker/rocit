@@ -56,6 +56,7 @@ class ROCITClassifier(nn.Module):
 
         self.emb = emb
         self.seq_length = seq_length
+        self.n_blocks = n_blocks
         self.n_heads = n_heads
         self.pos_emb = nn.Embedding(seq_length, emb)
         self.dropout=dropout_rate
