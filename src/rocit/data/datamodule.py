@@ -6,13 +6,14 @@ import torchmetrics
 from torch.utils.data import Dataset, DataLoader
 class ROCITDataModule(pl.LightningDataModule):
 
-    NUM_WORKERS =10
+    
     def __init__(
         self,
         train_dataset: Dataset,
         test_dataset: Dataset,
         val_dataset: Dataset,
         batch_size: int,
+        num_workers: int = 10
         
     ):
         super().__init__()
@@ -20,6 +21,7 @@ class ROCITDataModule(pl.LightningDataModule):
         self.test_dataset = test_dataset
         self.val_dataset = val_dataset
         self.batch_size = batch_size
+        self.num_workers = num_workers
         self.pos_weight = None
 
     def setup(self, stage=None):
@@ -39,14 +41,14 @@ class ROCITDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             drop_last=True,
-            num_workers=self.NUM_WORKERS,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,
             batch_size=self.batch_size,
-            num_workers=self.NUM_WORKERS,
+            num_workers=self.num_workers,
             drop_last=False,
         )
 
@@ -54,6 +56,6 @@ class ROCITDataModule(pl.LightningDataModule):
         return DataLoader(
             self.test_dataset,
             batch_size=self.batch_size,
-            num_workers=self.NUM_WORKERS,
+            num_workers=self.num_workers,
             drop_last=False,
         )

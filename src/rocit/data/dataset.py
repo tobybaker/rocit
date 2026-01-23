@@ -108,13 +108,10 @@ class ReadDatasetBuilder(TorchDataset):
         if not read_df['methylation'].is_between(0, 255).all():
             raise ValueError('Methylation column should only have values between 0 and 255')
 
-
-        key_cols = ['read_index', 'read_position']
-        if 'sample_id' in read_df.columns:
-            key_cols.append('sample_id')
-        
-        if read_df.select(key_cols).is_duplicated().any():
-            raise ValueError(f'Read data should be unique up to {"-".join(key_cols)}')
+        test_cols = list(self.key_cols)
+        test_cols.append('read_position')
+        if read_df.select(test_cols).is_duplicated().any():
+            raise ValueError(f'Read data should be unique up to {"-".join(test_cols)}')
         
     def _get_processed_read_index_data(self, read_index_df: pl.DataFrame) -> dict:
         processed = {}
@@ -133,8 +130,7 @@ class ReadDatasetBuilder(TorchDataset):
         processed['read_position'] = read_index_df.get_column('read_position').cast(pl.Int32).to_numpy()
         
         for embedding_index_col in self.embedding_index_cols:
-            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()
-            
+            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()  
             
         return processed
     
@@ -182,7 +178,7 @@ class ReadDatasetBuilder(TorchDataset):
         return ReadDataset(
             hf_dataset=hf_dataset,
             label_cols=self.label_cols,
-            embedding_index_cols=self.embedding_index_cols
+            embedding_index_cols=self.embedding_index_cols,
         )
     
     
@@ -196,14 +192,16 @@ class ReadDataset(TorchDataset):
 
         self.hf_dataset = hf_dataset
         self.label_cols = label_cols
-        self.max_len = max_len
         self.embedding_index_cols =embedding_index_cols
+        self.max_len = max_len
         
-        
+
     def __len__(self) -> int:
         return len(self.hf_dataset)
     
-
+    def apply_noise(self,batch,noise_std=0.02):
+        for col in ['methylation'] + self.embedding_index_cols:
+            batch[col] = batch[col]+torch.randn_like(batch[col])*noise_std
     def get_downsample_indices(self,seq_len: int):
         
         if seq_len > self.max_len:
@@ -260,5 +258,6 @@ class ReadDataset(TorchDataset):
         item_data['read_position']  = ((item_data['read_position'].float() - (item_data['read_position'][0].float())) / self.BASE_READ_LENGTH - 0.5)
         
         item_data['attention_mask'] = attention_mask
-        
+
+
         return item_data
