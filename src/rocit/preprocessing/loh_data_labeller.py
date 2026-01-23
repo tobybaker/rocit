@@ -37,13 +37,13 @@ def get_loh_table(pretrain_data,max_major_cn:int=4,min_segment_length=1e6):
     loh_table =  pretrain_data.sample_copy_number.filter((pl.col('minor_cn')==0))
     loh_table = loh_table.filter(pl.col('major_cn').is_between(1,max_major_cn))
     
-    valid_chromosomes = [f'chr{x}' for x in range(1,23)]+['chrX']
+    valid_chromosomes = [f'chr{x}' for x in range(1,23)]
     loh_table = loh_table.filter(pl.col('chromosome').is_in(valid_chromosomes))
     
     loh_table = loh_table.filter(pl.col('segment_length')>min_segment_length)
     return loh_table
 
-def get_haploblocks(pretrain_data,min_block_size=1e5):
+def get_haploblocks(pretrain_data,min_block_size=1e6):
     haploblocks = pretrain_data.sample_haploblocks
     haploblocks = haploblocks.filter(pl.col('block_size')>=min_block_size)
     haploblocks = haploblocks.drop(['n_variants'])
@@ -61,8 +61,13 @@ def get_subblocks(haploblocks,subblock_size=int(1e5)):
             row['subblock_start'] = block_spacing[i]
             row['subblock_end'] = block_spacing[i+1]
             subblock_store.append(row)
-    return pl.DataFrame(subblock_store)
-
+    subblock_df =  pl.DataFrame(subblock_store)
+    subblock_df = subblock_df.with_columns(
+        pl.col('subblock_id').cast(pl.Categorical),
+        pl.col('subblock_start').cast(pl.Int32),
+        pl.col('subblock_end').cast(pl.Int32)
+    )
+    return subblock_df
 def get_minor_cn_share(cn_row):
     total_share = cn_row['total_cn']*cn_row['purity'] +cn_row['normal_total_cn']*(1-cn_row['purity'])
     minor_share = cn_row['normal_minor_cn']*(1-cn_row['purity'])+ cn_row['purity']*cn_row['minor_cn']
@@ -89,6 +94,7 @@ def get_pass_blocks(read_table,block_cols,minor_cn_share,min_coverage:int=20,max
     return block_df.select(block_cols)
 
 def get_min_haplotags(read_table,block_cols):
+    
     block_df = read_table.pivot(
         on='haplotag', index=block_cols, values='haplotag', aggregate_function='len'
     ).fill_null(0)
@@ -107,6 +113,7 @@ def get_tumor_labelled_reads(pretrain_data):
 
         minor_cn_share = get_minor_cn_share(cn_row)
         read_table = bam_tools.get_reads_from_cn_row(cn_row,pretrain_data.sample_bam_path)
+        
         read_table = read_table.join(pretrain_data.sample_haplotags.drop('block_id'),how='inner',on=['chromosome','read_index'])
         
         
@@ -125,6 +132,9 @@ def get_tumor_labelled_reads(pretrain_data):
 
         read_table = read_table.join(pass_subblocks,how='inner',on=subblock_cols)
         read_table = read_table.join(pass_blocks,how='inner',on=block_cols)
+
+        if read_table.height ==0:
+            continue
 
         min_haplotags = get_min_haplotags(read_table,block_cols)
 

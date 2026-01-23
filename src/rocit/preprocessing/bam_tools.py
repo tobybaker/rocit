@@ -34,7 +34,10 @@ def get_reads_from_cn_row(region_row,bam_filepath):
             
             read_data.append(read_entry)
             
-    return pl.DataFrame(read_data)
+    read_data = pl.DataFrame(read_data)
+    read_data =read_data.with_columns(pl.col('chromosome').cast(pl.Categorical),pl.col('read_start').cast(pl.Int32),pl.col('read_end').cast(pl.Int32))
+
+    return read_data
 def pileup_read_contains_snv(pileup_read,vcf_row):
     
 
@@ -86,4 +89,5 @@ def get_variant_reads(vcf_row,bam_filepath):
                 read_store.append(read_data)
                 
     read_store= pl.DataFrame(read_store)
+    read_store =read_store.with_columns(pl.col('chromosome').cast(pl.Categorical))
     return read_store.drop_nulls()

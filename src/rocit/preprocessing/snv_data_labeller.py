@@ -95,6 +95,5 @@ def get_tumor_labelled_reads(pretrain_data,min_block_size=5e5):
             non_tumor_reads = non_tumor_reads.select(['chromosome','read_index']).with_columns(pl.lit(False).alias('tumor_read'))
             
             read_store.append(non_tumor_reads)
-        if len(read_store)>20:
-            break
+        
     return pl.concat(read_store)
