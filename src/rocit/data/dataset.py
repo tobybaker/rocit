@@ -115,6 +115,7 @@ class ReadDatasetBuilder(TorchDataset):
         
     def _get_processed_read_index_data(self, read_index_df: pl.DataFrame) -> dict:
         processed = {}
+        read_index_df = read_index_df.sort('read_position')
         
         # Access first element of a column
         for label_col in self.label_cols:
@@ -122,13 +123,13 @@ class ReadDatasetBuilder(TorchDataset):
         
         
         processed['n_cpgs'] = read_index_df.height
-        processed['methylation'] = read_index_df.get_column('methylation').cast(pl.UInt16).to_numpy()
+        processed['methylation'] = read_index_df.get_column('methylation').cast(pl.UInt8).to_numpy()
         
         # Direct cast and numpy conversion - missing reference positions are mapped to -1
         processed['position'] =  read_index_df.get_column('position').fill_null(-1).cast(pl.Int32).to_numpy()
        
         processed['read_position'] = read_index_df.get_column('read_position').cast(pl.Int32).to_numpy()
-        
+
         for embedding_index_col in self.embedding_index_cols:
             processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()  
             
@@ -199,15 +200,13 @@ class ReadDataset(TorchDataset):
     def __len__(self) -> int:
         return len(self.hf_dataset)
     
-    def apply_noise(self,batch,noise_std=0.02):
-        for col in ['methylation'] + self.embedding_index_cols:
-            batch[col] = batch[col]+torch.randn_like(batch[col])*noise_std
     def get_downsample_indices(self,seq_len: int):
         
         if seq_len > self.max_len:
             perm = torch.randperm(seq_len)
             downsample_indices = perm[:self.max_len]
             downsample_indices, _ = torch.sort(downsample_indices) # Maintain order
+            #return torch.arange(self.max_len)
             return downsample_indices
         return None
 
@@ -242,6 +241,7 @@ class ReadDataset(TorchDataset):
     def __getitem__(self, idx):
         processed_read_data = self.hf_dataset[idx]
         downsample_indices = self.get_downsample_indices(processed_read_data['n_cpgs'])
+        
         attention_mask = self.get_attention_mask(processed_read_data['n_cpgs'],downsample_indices)
 
         item_data = {}
@@ -256,8 +256,13 @@ class ReadDataset(TorchDataset):
             item_data[col] = self.apply_tensor_subsample_and_pad(torch.tensor(processed_read_data[col]).long(),downsample_indices)
         item_data['methylation']  = (item_data['methylation'] / self.METHYLATION_SCALE + 0.5 / self.METHYLATION_SCALE).float()
         item_data['read_position']  = ((item_data['read_position'].float() - (item_data['read_position'][0].float())) / self.BASE_READ_LENGTH - 0.5)
+        mask_start = attention_mask.long().argmax().item()-1
+        mask_start = mask_start if attention_mask.any() else attention_mask.numel()
+        
+        if mask_start <= self.max_len:
+            item_data['read_position'][mask_start:] = 0.0
+            item_data['methylation'][mask_start:] = 0.0
         
         item_data['attention_mask'] = attention_mask
-
 
         return item_data

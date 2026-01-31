@@ -65,10 +65,11 @@ class ROCITModel(pl.LightningModule):
         if self.trainer.datamodule is None:
             return
         pos_weight = self.trainer.datamodule.pos_weight
-
+        
         self.loss_fn = torch.nn.BCEWithLogitsLoss(
             pos_weight=pos_weight.to(self.device)
         )
+        
 
 
     def forward(self, **inputs) -> torch.Tensor:

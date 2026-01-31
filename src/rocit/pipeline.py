@@ -24,11 +24,11 @@ class TrainingParams:
     probability_threshold:float = 0.5
     gradient_clip_val:float = 1.0
     n_log_steps:int=  50
-    early_stopping_patience:int = 5
+    early_stopping_patience:int = 10
     batch_size:int = 256
     cell_map_dim:int=84
     sample_distribution_dim:int=19
-    noise_level:float=0.02
+    noise_level:float=0.01
 
 @dataclass
 class ROCITTrainStore():
@@ -50,7 +50,7 @@ class ROCITTrainResult():
 def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     if training_params is None:
         training_params = TrainingParams()
-    torch.set_float32_matmul_precision('high') 
+    torch.set_float32_matmul_precision('medium') 
     
     logger = CSVLogger(
     save_dir=log_dir,
@@ -58,14 +58,14 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     )
 
     early_stopping = EarlyStopping(
-    monitor="val_loss",
+    monitor="val_auroc",
     patience=training_params.early_stopping_patience,
-    mode="min",
+    mode="max",
     )
 
     checkpointing = ModelCheckpoint(
-        monitor="val_loss",
-        mode="min",
+        monitor="val_auroc",
+        mode="max",
         save_top_k=1,
         filename="best-checkpoint",
     )
@@ -107,7 +107,7 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
 
 
 def predict(inference_datastore,training_result,inference_batch_size:int=1024):
-    
+    torch.set_float32_matmul_precision('medium') 
     model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
     model.model.set_embedding_context(inference_datastore.embedding_sources)
     trainer =pl.Trainer(accelerator="auto", devices=1)

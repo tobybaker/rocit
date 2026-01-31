@@ -15,9 +15,8 @@ class ROCITPreTrainData:
     sample_variants:pl.DataFrame
     sample_haplotags:pl.DataFrame
     sample_haploblocks:pl.DataFrame
-    
     cluster_labels:pl.DataFrame
-    snv_cluster_assignments: pl.DataFrame| None=None
+    snv_cluster_assignments: pl.DataFrame| None = None
 
     def save(self, path: str):
         """Saves the entire object to disk."""

@@ -45,7 +45,7 @@ class SparseEmbeddingBlock(nn.Module):
 class ROCITClassifier(nn.Module):
 
     SCALE_CONSTANT:float = 0.05
-    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.2,sample_distribution_dim=19,cell_map_dim=84,noise_level=0.02):
+    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.0,sample_distribution_dim=19,cell_map_dim=84,noise_level=0.02):
         super().__init__()
 
         self.sample_distribution_dim = sample_distribution_dim

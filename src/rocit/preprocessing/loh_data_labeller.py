@@ -43,7 +43,7 @@ def get_loh_table(pretrain_data,max_major_cn:int=4,min_segment_length=1e6):
     loh_table = loh_table.filter(pl.col('segment_length')>min_segment_length)
     return loh_table
 
-def get_haploblocks(pretrain_data,min_block_size=1e6):
+def get_haploblocks(pretrain_data,min_block_size=5e5):
     haploblocks = pretrain_data.sample_haploblocks
     haploblocks = haploblocks.filter(pl.col('block_size')>=min_block_size)
     haploblocks = haploblocks.drop(['n_variants'])
@@ -80,7 +80,7 @@ def get_pass_blocks(read_table,block_cols,minor_cn_share,min_coverage:int=20,max
 
     #both haplotags should be present
     if not '1' in block_df.columns or not '2' in block_df.columns:
-        return df.clear()
+        return block_df.select(block_cols).clear()
     
     block_df = block_df.with_columns(
             total = pl.col("1") + pl.col("2"),
