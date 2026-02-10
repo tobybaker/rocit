@@ -1,7 +1,5 @@
 import pyBigWig
-import numpy as np
 import polars as pl
-import os
 import re
 import tarfile
 import urllib.request
