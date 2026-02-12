@@ -1,8 +1,15 @@
 import polars as pl
 
-from pathlib import Path
 METHYLATION_SCALE = 256.0
 def get_aggregate_methylation_distribution(methylation_df,min_n_cpgs:int=10):
+    methylation_df = methylation_df.drop_nulls("position")
+
+    methylation_dtype = methylation_df.schema['methylation']
+    if methylation_dtype != pl.UInt8:
+        raise ValueError(
+            f"Column methylation has dtype {methylation_dtype}, expected UInt8"
+        )
+    
 
     percentiles = [x/100.0 for x in range(5,100,5)]
     methylation_df = methylation_df.with_columns(
@@ -16,9 +23,5 @@ def get_aggregate_methylation_distribution(methylation_df,min_n_cpgs:int=10):
     for p in percentiles
     ).sort(['chromosome','position'])
 
-    return aggregate_methylation_df
-
-def process_default_methylation_df(methylation_df):
-    methylation_df = methylation_df.drop_nulls("position")
-    methylation_df = methylation_df.with_columns((pl.col('methylation').cast(pl.Float64)/256.0 +0.5/256.0).alias('methylation'))
+    return aggregate_methylation_df.collect()
 
