@@ -1,17 +1,18 @@
 import torch
-import polars
+import polars as pl
 
 from dataclasses import dataclass
 from torch.utils.data import Dataset, DataLoader, random_split
 
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+import lightning as L
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.loggers import CSVLogger
 
-
-from rocit.models import ROCITModel,ROCITClassifier
-from rocit.data import ROCITDataModule,ReadDataset,EmbeddingStore
+from rocit.data import ReadDataset,EmbeddingStore,ReadDatasetBuilder,ROCITDataModule
+from rocit.models import ROCITModel
 from pathlib import Path
+
+from typing import List
 
 @dataclass(frozen=True)
 class TrainingParams:
@@ -47,6 +48,43 @@ class ROCITTrainResult():
     best_checkpoint_path: Path
     log_dir: Path
 
+
+def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes):
+    
+    # Filter the list
+    all_chromosomes = read_data['chromosome'].unique()
+    non_train_chromosomes = val_chromosomes+test_chromosomes
+    train_chromosomes = [chrom for chrom in all_chromosomes if chrom not in non_train_chromosomes]
+    
+    sample_source = EmbeddingStore('sample_distribution',sample_distribution,['chromosome','position'])
+    cell_map_source = EmbeddingStore('cell_map',cell_atlas,['chromosome','position'])
+    
+    embedding_sources = {sample_source.name:sample_source,cell_map_source.name:cell_map_source}
+
+    label_cols = ['sample_id','read_index','chromosome','tumor_read']
+    key_cols = ['read_index']
+    
+    train_read_data = read_data.filter(pl.col("chromosome").is_in(train_chromosomes))
+    test_read_data = read_data.filter(pl.col("chromosome").is_in(test_chromosomes))
+    val_read_data = read_data.filter(pl.col("chromosome").is_in(val_chromosomes))
+
+
+    train_dataset_builder = ReadDatasetBuilder(train_read_data,label_cols,key_cols,embedding_sources)
+    test_dataset_builder = ReadDatasetBuilder(test_read_data,label_cols,key_cols,embedding_sources)
+    val_dataset_builder = ReadDatasetBuilder(val_read_data,label_cols,key_cols,embedding_sources)
+    
+    return ROCITTrainStore(train_dataset_builder.build(),val_dataset_builder.build(),test_dataset_builder.build(),embedding_sources)
+
+def training_wrapper(sample_id:str,
+        labelled_data:pl.DataFrame,
+        sample_distribution:pl.DataFrame,
+        cell_atlas:pl.DataFrame,
+        val_chromosomes:List[str],
+        test_chromosomes:List[str],
+        output_dir:Path):
+    rocit_dataset = get_sample_train_dataset(labelled_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes)
+    return train(rocit_dataset,output_dir,sample_id)
+    
 def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     if training_params is None:
         training_params = TrainingParams()
@@ -87,7 +125,7 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     )
     model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
-    trainer = pl.Trainer(
+    trainer = L.Trainer(
     max_epochs=training_params.max_epochs,
     accelerator="auto",
     devices="auto",
@@ -110,7 +148,7 @@ def predict(inference_datastore,training_result,inference_batch_size:int=1024):
     torch.set_float32_matmul_precision('medium') 
     model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
     model.model.set_embedding_context(inference_datastore.embedding_sources)
-    trainer =pl.Trainer(accelerator="auto", devices=1)
+    trainer =L.Trainer(accelerator="auto", devices=1)
 
     predict_loader =  DataLoader(
             inference_datastore.inference_dataset,
@@ -121,6 +159,7 @@ def predict(inference_datastore,training_result,inference_batch_size:int=1024):
         )
 
     predictions = trainer.predict(model, dataloaders=predict_loader)
-    predictions = polars.concat([polars.from_dict(batch) for batch in predictions])
+    predictions = pl.concat([pl.from_dict(batch) for batch in predictions])
+    
     return predictions
 
