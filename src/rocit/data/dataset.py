@@ -73,7 +73,7 @@ class EmbeddingStore:
         embedding_vector = torch.from_numpy(embedding_vector).float()
         return embedding_vector
 
-class ReadDatasetBuilder(TorchDataset):
+class ReadDatasetBuilder:
 
     def __init__(self, read_df_store,label_cols,key_cols,embedding_sources,max_len=511):
 
