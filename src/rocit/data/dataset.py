@@ -117,6 +117,7 @@ class ReadDatasetBuilder(TorchDataset):
         processed = {}
         read_index_df = read_index_df.sort('read_position')
         
+        
         # Access first element of a column
         for label_col in self.label_cols:
             processed[label_col.lower()] = read_index_df.get_column(label_col)[0]

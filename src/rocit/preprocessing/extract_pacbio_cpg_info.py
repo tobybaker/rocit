@@ -202,7 +202,7 @@ def process_bam(
     bam_path: str | Path,
     output_dir: str | Path,
     sample_id:str,
-    chromosomes: Optional[list[str]] = None,
+    chromosomes: Optional[str] = None,
     index_path: Optional[str | Path] = None,
     min_mapq: int = 0,
     n_workers: int = 1
@@ -222,9 +222,11 @@ def process_bam(
     Returns:
         List of paths to output parquet files.
     """
+    #if chromosomes is not none it should be a space separated
     if chromosomes is None:
         chromosomes = HUMAN_STANDARD_CHROMOSOMES
-
+    else:
+        chromosomes = chromosomes
     bam_path = Path(bam_path)
     output_dir = Path(output_dir)
 
@@ -260,34 +262,3 @@ def process_bam(
         ]
         return [f.result() for f in futures]
 
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Extract CpG methylation from PacBio BAM files"
-    )
-    parser.add_argument("bam", type=Path, help="Input BAM file")
-    parser.add_argument("output_dir", type=Path, help="Output directory for parquet files")
-    parser.add_argument("sample_id", type=str, help="Sample ID")
-    parser.add_argument("--index", type=Path, help="BAM index file path")
-    parser.add_argument("--min-mapq", type=int, default=0, help="Minimum mapping quality")
-    parser.add_argument("--workers", type=int, default=1, help="Number of parallel workers")
-    parser.add_argument(
-        "--chromosomes",
-        nargs="+",
-        default=None,
-        help="Chromosomes to process (default: all standard human)"
-    )
-
-    args = parser.parse_args()
-
-    output_files = process_bam(
-        bam_path=args.bam,
-        output_dir=args.output_dir,
-        sample_id=args.sample_id,
-        chromosomes=args.chromosomes,
-        index_path=args.index,
-        min_mapq=args.min_mapq,
-        n_workers=args.workers
-    )

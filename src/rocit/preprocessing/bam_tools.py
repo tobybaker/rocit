@@ -2,7 +2,6 @@ import polars as pl
 import pysam
 
 def should_filter_read(read) -> bool:
-
     if read.is_unmapped:
         return True
 
@@ -17,7 +16,6 @@ def should_filter_read(read) -> bool:
 
     if read.is_duplicate:
         return True
-
     return False
 def get_reads_from_cn_row(region_row,bam_filepath):
     read_data =[]

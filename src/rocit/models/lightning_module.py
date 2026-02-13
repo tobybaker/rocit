@@ -1,5 +1,5 @@
 import torch
-import pytorch_lightning as pl
+import lightning as L
 
 from torch.nn import BCEWithLogitsLoss
 from torch.optim import AdamW
@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from rocit.models.model_architecture import ROCITClassifier
 
-class ROCITModel(pl.LightningModule):
+class ROCITModel(L.LightningModule):
     def __init__(
         self,
         model_dim:int,
@@ -91,9 +91,9 @@ class ROCITModel(pl.LightningModule):
         return loss, probs, labels.int()
 
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         loss, probs, labels = self._shared_step(batch)
-
+        
         self.train_metrics.update(probs, labels)
         self.log(
             "train_loss",
@@ -105,13 +105,13 @@ class ROCITModel(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         loss, probs, labels = self._shared_step(batch)
 
         self.val_metrics.update(probs, labels)
         self.log("val_loss",loss)
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch):
         loss, probs, labels = self._shared_step(batch)
 
         self.test_metrics.update(probs, labels)
@@ -131,7 +131,7 @@ class ROCITModel(pl.LightningModule):
         self.test_metrics.reset()
 
    
-    def predict_step(self, batch, batch_idx):
+    def predict_step(self, batch):
         logits = self(**batch)
         probs = torch.sigmoid(logits)
 

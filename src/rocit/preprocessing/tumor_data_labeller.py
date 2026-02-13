@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ROCITPreTrainData:
+class ROCITSomaticData:
     sample_id:str
     sample_bam_path:Path
     sample_methylation_dir:Path
@@ -24,11 +24,12 @@ class ROCITPreTrainData:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path: str) -> 'ROCITPreTrainData':
+    def load(cls, path: str) -> 'ROCITSomaticData':
         """Reloads the object from disk."""
         with open(path, 'rb') as f:
             return pickle.load(f)
 
+    
 
 
 def make_read_labels(pretrain_data):

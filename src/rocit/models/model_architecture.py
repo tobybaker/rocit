@@ -100,14 +100,14 @@ class ROCITClassifier(nn.Module):
     def forward(self, methylation,read_position,sample_distribution_index,cell_map_index,attention_mask,**kwargs):
 
         cell_type_methylation_sample = self.cell_map_embedding(cell_map_index)
-        
+
         position_methylation_sample= self.sample_distribution_embedding(sample_distribution_index)
         
         if self.training:
             cell_type_methylation_sample += torch.randn_like(cell_type_methylation_sample)*self.noise_level
             position_methylation_sample += torch.randn_like(position_methylation_sample)*self.noise_level
             methylation += torch.randn_like(methylation)*self.noise_level
-        
+            
         input_vector = self.cell_type_embedder(cell_type_methylation_sample) + self.methylation_embedder(torch.cat([position_methylation_sample,methylation.unsqueeze(-1),read_position.unsqueeze(-1)],dim=-1))
 
         pos_emb = self.pos_emb(torch.arange(input_vector.shape[1], device=input_vector.device))[None, :, :].expand_as(input_vector)

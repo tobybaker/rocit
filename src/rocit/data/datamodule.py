@@ -1,10 +1,10 @@
 import torch
-import pytorch_lightning as pl
+import lightning as L
 
 
 import torchmetrics
 from torch.utils.data import Dataset, DataLoader
-class ROCITDataModule(pl.LightningDataModule):
+class ROCITDataModule(L.LightningDataModule):
 
     
     def __init__(
