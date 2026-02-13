@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 
 from rocit.data import ReadDataset,EmbeddingStore,ReadDatasetBuilder,ROCITDataModule
+from rocit.data.datamodule import get_optimal_num_workers
 from rocit.models import ROCITModel
 from pathlib import Path
 
@@ -30,6 +31,8 @@ class TrainingParams:
     cell_map_dim:int=84
     sample_distribution_dim:int=19
     noise_level:float=0.01
+    seq_length:int=511
+    dropout_rate:float=0.02
 
 @dataclass
 class ROCITTrainStore():
@@ -67,7 +70,6 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     train_read_data = read_data.filter(pl.col("chromosome").is_in(train_chromosomes))
     test_read_data = read_data.filter(pl.col("chromosome").is_in(test_chromosomes))
     val_read_data = read_data.filter(pl.col("chromosome").is_in(val_chromosomes))
-
 
     train_dataset_builder = ReadDatasetBuilder(train_read_data,label_cols,key_cols,embedding_sources)
     test_dataset_builder = ReadDatasetBuilder(test_read_data,label_cols,key_cols,embedding_sources)
@@ -122,7 +124,9 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     threshold=training_params.probability_threshold,
     sample_distribution_dim=training_params.sample_distribution_dim,
     cell_map_dim=training_params.cell_map_dim,
-    noise_level=training_params.noise_level
+    noise_level=training_params.noise_level,
+    seq_length=training_params.seq_length,
+    dropout_rate=training_params.dropout_rate
     )
     model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
@@ -156,7 +160,6 @@ def get_sample_inference_store(
     
     embedding_sources = {sample_source.name:sample_source,cell_map_source.name:cell_map_source}
 
-
     label_cols = ['read_index','chromosome']
     key_cols = ['read_index']
     
@@ -177,6 +180,7 @@ def predict_wrapper(sample_id:str,
 
     out_path = output_dir/f"{sample_id}_tumor_origin_predictions.parquet"
     predictions.write_parquet(out_path)
+
 def predict(inference_datastore,training_result,inference_batch_size:int=1024):
     torch.set_float32_matmul_precision('medium') 
     model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
@@ -188,7 +192,7 @@ def predict(inference_datastore,training_result,inference_batch_size:int=1024):
             batch_size=inference_batch_size,
             shuffle=False,
             drop_last=False,
-            num_workers=10,
+            num_workers=get_optimal_num_workers(),
         )
 
     predictions = trainer.predict(model, dataloaders=predict_loader)

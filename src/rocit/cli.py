@@ -34,8 +34,6 @@ STANDARD_CASTS = {
     "chromosome": pl.Categorical,
 }
 
-
-
 class ValidationError(Exception):
     """Raised when an input DataFrame fails schema validation."""
 class DataFramePath(click.Path):
@@ -187,6 +185,7 @@ def preprocess(config_path: Path) -> None:
     sample_variants = read_dataframe(variants_path)
     sample_haplotags = read_dataframe(haplotags_path)
     sample_haploblocks = read_dataframe(haploblocks_path)
+    
     cluster_labels = read_dataframe(cluster_labels_path)
 
     snv_cluster_assignments: pl.DataFrame | None = None
