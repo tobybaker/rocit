@@ -1,11 +1,29 @@
 import pickle
 import polars as pl
 import numpy as np
-from rocit.preprocessing import snv_data_labeller,loh_data_labeller
+from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_somatic_data
 from pathlib import Path
 from dataclasses import dataclass
 
+'''
 
+# Define clonal cluster criteria
+    is_clonal = (
+        pl.col("location").is_between(min_clonal_cluster, max_clonal_cluster)
+        & (pl.col("frac_mutations") > min_clonal_fraction)
+    )
+    is_above_clonal = pl.col("location") >= max_clonal_cluster
+
+    # Assign cluster labels
+    cluster_label_expr = (
+        pl.when(is_clonal).then(pl.lit("Pass_Clonal"))
+        .when(is_above_clonal).then(pl.lit("Fail"))
+        .otherwise(pl.lit("Pass"))
+        .alias("cluster_label")
+    )
+    cluster_info = cluster_info.with_columns(cluster_label_expr)
+
+'''
 @dataclass
 class ROCITSomaticData:
     sample_id:str
@@ -28,7 +46,8 @@ class ROCITSomaticData:
         """Reloads the object from disk."""
         with open(path, 'rb') as f:
             return pickle.load(f)
-
+    def __post_init__(self):
+        prepare_somatic_data.prepare_somatic_data(self)
     
 
 
