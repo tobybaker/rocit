@@ -3,7 +3,13 @@ import polars as pl
 from pathlib import Path
 from rocit.preprocessing.extract_pacbio_cpg_info import process_bam
 from rocit.preprocessing import tumor_data_labeller,get_aggregate_methylation_distribution_from_dir
-from rocit.pipeline import training_wrapper,predict_wrapper
+from rocit.pipeline import training_wrapper,predict_wrapper,ROCITTrainResult
+from rocit.config import (
+    TrainConfig, PredictConfig, PreprocessConfig, RunConfig,
+    load_config, ConfigError,
+    resolve_file, resolve_dir,
+    validate_train_config, validate_predict_config, validate_run_config,
+)
 from typing import Any,Optional, List
 
 _IO_READERS: dict[str, tuple] = {
@@ -121,172 +127,76 @@ def main():
 
 @main.command()
 @click.option(
-    '--sample-id', 
-    required=True, 
-    type=str, 
-    help='Unique identifier for the sample.'
+    "--config", "config_path", required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to YAML configuration file for training.",
 )
-@click.option(
-    '--labelled-data', 
-    required=True, 
-    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
-    help='Path to the labelled data file.'
-)
-@click.option(
-    '--sample-distribution', 
-    required=True, 
-    type=click.Path(exists=True, path_type=Path),
-    help='Path to the sample distribution file.'
-)
-@click.option(
-    '--cell-atlas', 
-    required=True, 
-    type=click.Path(exists=True, path_type=Path),
-    help='Path to the cell atlas directory or file.'
-)
-@click.option(
-    '--val-chromosomes', 
-    required=True, 
-    type=str,
-    callback=parse_chromosomes, # <--- Hooking the parser here
-    help='Space-separated string of validation chromosomes (e.g., "chr1 chr2").'
-)
-@click.option(
-    '--test-chromosomes', 
-    required=True, 
-    type=str, 
-    callback=parse_chromosomes, # <--- Hooking the parser here
-    help='Space-separated string of test chromosomes (e.g., "chr3 chr4").'
-)
-@click.option(
-    '--output-dir',
-    required=True,
-    type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=Path),
-    help='Directory where training artifacts will be saved.'
-)
-@click.option(
-    '--cache-dir',
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    required=False,
-    default='/scratch',
-    help="Temporary directory for training data."
-)
-def train(
-        sample_id:str,
-        labelled_data:Path,
-        sample_distribution:Path,
-        cell_atlas:Path,
-        val_chromosomes:str,
-        test_chromosomes:str,
-        output_dir:Path,
-        cache_dir:Path):
-    """
-    CLI interface to trigger the training process.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    if set(val_chromosomes) & set(test_chromosomes):
-        raise ValidationError(f'Overlap between validation chromosomes {val_chromosomes} and test chromosomes {test_chromosomes}.')
+def train(config_path: Path):
+    """Train a ROCIT model from a YAML configuration file."""
+    cfg = load_config(TrainConfig, config_path)
+    validate_train_config(cfg)
 
-    labelled_data = read_dataframe(labelled_data)
-    sample_distribution = read_dataframe(sample_distribution)
-    cell_atlas = read_dataframe(cell_atlas)
-    
+    labelled_data_path = resolve_file(cfg.labelled_data)
+    sample_distribution_path = resolve_file(cfg.sample_distribution)
+    cell_atlas_path = resolve_file(cfg.cell_atlas)
+    output_dir = resolve_dir(cfg.output_dir, must_exist=False)
+    cache_dir = resolve_dir(cfg.cache_dir, must_exist=False)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    labelled_data = read_dataframe(labelled_data_path)
+    sample_distribution = read_dataframe(sample_distribution_path)
+    cell_atlas = read_dataframe(cell_atlas_path)
+
     training_wrapper(
-        sample_id=sample_id,
+        sample_id=cfg.sample_id,
         labelled_data=labelled_data,
         sample_distribution=sample_distribution,
         cell_atlas=cell_atlas,
-        val_chromosomes=val_chromosomes,
-        test_chromosomes=test_chromosomes,
-        output_dir=output_dir ,
-        cache_dir=cache_dir
+        val_chromosomes=list(set(cfg.val_chromosomes)),
+        test_chromosomes=list(set(cfg.test_chromosomes)),
+        output_dir=output_dir,
+        cache_dir=cache_dir,
     )
 
     
 @main.command()
 @click.option(
-    "--sample-id", required=True, type=str,
-    help="Unique sample identifier.",
+    "--config", "config_path", required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to YAML configuration file for preprocessing.",
 )
-@click.option(
-    "--bam", "bam", required=True,
-    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
-    help="Path to the sample BAM file.",
-)
-@click.option(
-    "--methylation-dir", "methylation_dir", required=True,
-    type=click.Path(exists=True, file_okay=False, readable=True, path_type=Path),
-    help="Directory containing per-sample methylation data.",
-)
-@click.option(
-    "--copy-number", "copy_number", required=True,
-    type=DataFramePath(),
-    help=f"Path to copy-number DataFrame.",
-)
-@click.option(
-    "--variants", "variants", required=True,
-    type=DataFramePath(),
-    help=f"Path to variant calls DataFrame.",
-)
-@click.option(
-    "--haplotags", "haplotags", required=True,
-    type=DataFramePath(),
-    help=f"Path to haplotag assignments DataFrame.",
-)
-@click.option(
-    "--haploblocks", "haploblocks", required=True,
-    type=DataFramePath(),
-    help=f"Path to haploblock regions DataFrame.",
-)
-@click.option(
-    "--cluster-labels", "cluster_labels", required=True,
-    type=DataFramePath(),
-    help=f"Path to cluster label DataFrame.",
-)
-@click.option(
-    "--snv-clusters", "snv_clusters", required=False, default=None,
-    type=DataFramePath(),
-    help=f"(Optional) Path to SNV cluster assignments DataFrame.",
-)
-@click.option(
-    "--output-dir", "output_dir", required=True,
-    type=click.Path(file_okay=False, writable=True, path_type=Path),
-    help="Output directory for preprocessed dataframes. Created if absent.",
-)
-def preprocess(
-    sample_id: str,
-    bam: Path,
-    methylation_dir: Path,
-    copy_number: Path,
-    variants: Path,
-    haplotags: Path,
-    haploblocks: Path,
-    cluster_labels: Path,
-    snv_clusters: Path | None,
-    output_dir: Path,
-) -> None:
-    """Preprocess a sample for ROCIT training.
+def preprocess(config_path: Path) -> None:
+    """Preprocess a sample for ROCIT training from a YAML configuration file."""
+    cfg = load_config(PreprocessConfig, config_path)
 
-    Reads, validates, and bundles all required inputs into a
-    ROCITPreTrainData object, then runs the preprocessing pipeline.
-    """
-    click.echo(f"Loading inputs for sample '{sample_id}' ...")
+    bam_path = resolve_file(cfg.bam)
+    methylation_dir = resolve_dir(cfg.methylation_dir)
+    copy_number_path = resolve_file(cfg.copy_number)
+    variants_path = resolve_file(cfg.variants)
+    haplotags_path = resolve_file(cfg.haplotags)
+    haploblocks_path = resolve_file(cfg.haploblocks)
+    cluster_labels_path = resolve_file(cfg.cluster_labels)
+    output_dir = resolve_dir(cfg.output_dir, must_exist=False)
 
-    sample_copy_number = read_dataframe(copy_number)
-    sample_variants = read_dataframe(variants)
-    sample_haplotags = read_dataframe(haplotags)
-    sample_haploblocks = read_dataframe(haploblocks)
-    cluster_labels = read_dataframe(cluster_labels)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo(f"Loading inputs for sample '{cfg.sample_id}' ...")
+
+    sample_copy_number = read_dataframe(copy_number_path)
+    sample_variants = read_dataframe(variants_path)
+    sample_haplotags = read_dataframe(haplotags_path)
+    sample_haploblocks = read_dataframe(haploblocks_path)
+    cluster_labels = read_dataframe(cluster_labels_path)
 
     snv_cluster_assignments: pl.DataFrame | None = None
-    if snv_clusters is not None:
-        snv_cluster_assignments = read_dataframe(snv_clusters)
-        
+    if cfg.snv_clusters is not None:
+        snv_clusters_path = resolve_file(cfg.snv_clusters)
+        snv_cluster_assignments = read_dataframe(snv_clusters_path)
 
     somatic_data = tumor_data_labeller.ROCITSomaticData(
-        sample_id=sample_id,
-        sample_bam_path=bam,
+        sample_id=cfg.sample_id,
+        sample_bam_path=bam_path,
         sample_methylation_dir=methylation_dir,
         sample_copy_number=sample_copy_number,
         sample_variants=sample_variants,
@@ -296,104 +206,59 @@ def preprocess(
         snv_cluster_assignments=snv_cluster_assignments,
     )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     labelled_reads = tumor_data_labeller.make_read_labels(somatic_data)
-    labelled_methylation_data = tumor_data_labeller.get_labelled_methylation_data(methylation_dir,labelled_reads)
+    labelled_methylation_data = tumor_data_labeller.get_labelled_methylation_data(
+        methylation_dir, labelled_reads
+    )
 
-    labelled_reads_out_path = output_dir/'labelled_reads.parquet'
-    labelled_methylation_data_out_path = output_dir/'labelled_methylation_data.parquet'
-
-    labelled_reads.to_parquet(labelled_reads_out_path)
-    labelled_methylation_data.to_parquet(labelled_methylation_data_out_path)
+    labelled_reads.to_parquet(output_dir / 'labelled_reads.parquet')
+    labelled_methylation_data.to_parquet(output_dir / 'labelled_methylation_data.parquet')
 
 @main.command()
 @click.option(
-    '--sample-id', 
-    required=True, 
-    type=str, 
-    help='Unique identifier for the sample.'
+    "--config", "config_path", required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to YAML configuration file for prediction.",
 )
-@click.option(
-    '--train-result', 
-    required=True, 
-    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
-    help='Path to labelled checkpoint file.'
-)
+def predict(config_path: Path):
+    """Run ROCIT prediction from a YAML configuration file."""
+    cfg = load_config(PredictConfig, config_path)
+    validate_predict_config(cfg)
 
-@click.option(
-    '--sample-distribution', 
-    required=True, 
-    type=click.Path(exists=True, path_type=Path),
-    help='Path to the sample distribution file.'
-)
-@click.option(
-    '--cell-atlas', 
-    required=True, 
-    type=click.Path(exists=True, path_type=Path),
-    help='Path to the cell atlas directory or file.'
-)
+    train_result_path = resolve_file(cfg.train_result)
+    sample_distribution_path = resolve_file(cfg.sample_distribution)
+    cell_atlas_path = resolve_file(cfg.cell_atlas)
+    output_dir = resolve_dir(cfg.output_dir, must_exist=False)
+    cache_dir = resolve_dir(cfg.cache_dir, must_exist=False)
 
-@click.option(
-    '--output-dir',
-    required=True,
-    type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=Path),
-    help='Directory where training artifacts will be saved.'
-)
-@click.option(
-    '--cache-dir',
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    required=False,
-    default='/scratch',
-    help="Temporary directory for training data."
-)
-@click.option(
-    '--read-store', 
-    required=False, 
-    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
-    help='Path to dataframe of read methylation data.'
-)
-@click.option(
-    '--read-store-dir', 
-    required=False, 
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
-    help='Path to the directory containing read methylation data.'
-)
-def predict(
-        sample_id:str,
-        train_result:Path,
-        sample_distribution:Path,
-        cell_atlas:Path,
-        output_dir:Path,
-        read_store:Path,
-        read_store_dir:Path,
-        cache_dir:Path):
-    """
-    CLI interface to trigger the training process.
-    """
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    if not (read_store or read_store_dir):
-        raise click.UsageError("You must provide either --read-store or --read-store-dir.")
-    
-    if read_store and read_store_dir:
-        raise click.UsageError("Arguments --read-store and --read-store-dir are mutually exclusive.")
 
-    if read_store:
-        read_store = [read_dataframe(read_store,scan=True).filter(~pl.col('supplementary_alignment'))]
-    if read_store_dir:
-    
-        read_store = [read_dataframe(filepath,scan=True).filter(~pl.col('supplementary_alignment')) for filepath in read_store_dir.iterdir()]
-    sample_distribution = read_dataframe(sample_distribution)
-    cell_atlas = read_dataframe(cell_atlas)
-    
+    if cfg.read_store:
+        rs_path = resolve_file(cfg.read_store)
+        read_store = [read_dataframe(rs_path, scan=True).filter(~pl.col('supplementary_alignment'))]
+    else:
+        rs_dir = resolve_dir(cfg.read_store_dir)
+        read_store = [
+            read_dataframe(fp, scan=True).filter(~pl.col('supplementary_alignment'))
+            for fp in rs_dir.iterdir()
+        ]
+
+    sample_distribution = read_dataframe(sample_distribution_path)
+    cell_atlas = read_dataframe(cell_atlas_path)
+
+    train_result = ROCITTrainResult(
+        best_checkpoint_path=train_result_path,
+        log_dir=train_result_path.parent,
+    )
+
     predict_wrapper(
-        sample_id=sample_id,
+        sample_id=cfg.sample_id,
         train_result=train_result,
         read_store=read_store,
         sample_distribution=sample_distribution,
         cell_atlas=cell_atlas,
-        output_dir=output_dir ,
-        cache_dir=cache_dir
+        output_dir=output_dir,
+        cache_dir=cache_dir,
     )
 
 @main.command()
@@ -491,6 +356,113 @@ def extract_cpg_distribution(methylation_dir:Path, output_dir:Path, sample_id:st
     """Aggregates methylation distribution from a directory of parquet files."""
     output_dir.mkdir(parents=True, exist_ok=True)
     get_aggregate_methylation_distribution_from_dir(methylation_dir,output_dir,sample_id)
+
+@main.command()
+@click.option(
+    "--config", "config_path", required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to YAML configuration file for the full pipeline.",
+)
+def run(config_path: Path):
+    """Run the full ROCIT pipeline: extract methylation, label reads, train, and predict."""
+    cfg = load_config(RunConfig, config_path)
+    validate_run_config(cfg)
+
+    # Resolve external input paths
+    bam_path = resolve_file(cfg.bam)
+    copy_number_path = resolve_file(cfg.copy_number)
+    variants_path = resolve_file(cfg.variants)
+    haplotags_path = resolve_file(cfg.haplotags)
+    haploblocks_path = resolve_file(cfg.haploblocks)
+    cluster_labels_path = resolve_file(cfg.cluster_labels)
+    cell_atlas_path = resolve_file(cfg.cell_atlas)
+    output_dir = resolve_dir(cfg.output_dir, must_exist=False)
+    cache_dir = resolve_dir(cfg.cache_dir, must_exist=False)
+
+    bam_index_path = resolve_file(cfg.bam_index) if cfg.bam_index else None
+
+    snv_cluster_assignments: pl.DataFrame | None = None
+    if cfg.snv_clusters is not None:
+        snv_cluster_assignments = read_dataframe(resolve_file(cfg.snv_clusters))
+
+    # Create output subdirectories
+    methylation_dir = output_dir / "methylation"
+    distribution_dir = output_dir / "distribution"
+    preprocess_dir = output_dir / "preprocessing"
+    training_dir = output_dir / "training"
+    prediction_dir = output_dir / "predictions"
+    for d in [methylation_dir, distribution_dir, preprocess_dir, training_dir, prediction_dir, cache_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Step 1: Extract BAM methylation
+    click.echo(f"[1/5] Extracting BAM methylation for '{cfg.sample_id}' ...")
+    process_bam(
+        bam_path=bam_path,
+        output_dir=methylation_dir,
+        sample_id=cfg.sample_id,
+        chromosomes=cfg.chromosomes,
+        index_path=bam_index_path,
+        min_mapq=cfg.min_mapq,
+        n_workers=cfg.workers,
+    )
+
+    # Step 2: Compute CpG distribution
+    click.echo("[2/5] Computing CpG distribution ...")
+    get_aggregate_methylation_distribution_from_dir(methylation_dir, distribution_dir, cfg.sample_id)
+    sample_distribution_path = distribution_dir / f"{cfg.sample_id}_methylation_distribution.parquet"
+
+    # Step 3: Label reads
+    click.echo("[3/5] Labelling reads ...")
+    somatic_data = tumor_data_labeller.ROCITSomaticData(
+        sample_id=cfg.sample_id,
+        sample_bam_path=bam_path,
+        sample_methylation_dir=methylation_dir,
+        sample_copy_number=read_dataframe(copy_number_path),
+        sample_variants=read_dataframe(variants_path),
+        sample_haplotags=read_dataframe(haplotags_path),
+        sample_haploblocks=read_dataframe(haploblocks_path),
+        cluster_labels=read_dataframe(cluster_labels_path),
+        snv_cluster_assignments=snv_cluster_assignments,
+    )
+    labelled_reads = tumor_data_labeller.make_read_labels(somatic_data)
+    labelled_methylation_data = tumor_data_labeller.get_labelled_methylation_data(
+        methylation_dir, labelled_reads
+    )
+    labelled_reads.write_parquet(preprocess_dir / "labelled_reads.parquet")
+    labelled_methylation_data.write_parquet(preprocess_dir / "labelled_methylation_data.parquet")
+
+    # Step 4: Train
+    click.echo("[4/5] Training model ...")
+    sample_distribution = pl.read_parquet(sample_distribution_path)
+    cell_atlas = read_dataframe(cell_atlas_path)
+    train_result = training_wrapper(
+        sample_id=cfg.sample_id,
+        labelled_data=labelled_methylation_data,
+        sample_distribution=sample_distribution,
+        cell_atlas=cell_atlas,
+        val_chromosomes=list(set(cfg.val_chromosomes)),
+        test_chromosomes=list(set(cfg.test_chromosomes)),
+        output_dir=training_dir,
+        cache_dir=cache_dir,
+    )
+
+    # Step 5: Predict
+    click.echo("[5/5] Running predictions ...")
+    read_store = [
+        pl.scan_parquet(f).filter(~pl.col("supplementary_alignment"))
+        for f in methylation_dir.glob("*_cpg_methylation.parquet")
+    ]
+    predict_wrapper(
+        sample_id=cfg.sample_id,
+        train_result=train_result,
+        read_store=read_store,
+        sample_distribution=sample_distribution,
+        cell_atlas=cell_atlas,
+        output_dir=prediction_dir,
+        cache_dir=cache_dir,
+    )
+
+    click.echo(f"Pipeline complete. Results in {prediction_dir}")
 
 if __name__ == "__main__":
     main()
