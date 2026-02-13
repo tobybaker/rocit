@@ -49,7 +49,7 @@ class ROCITTrainResult():
     log_dir: Path
 
 
-def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes):
+def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes,cache_dir):
     
     # Filter the list
     all_chromosomes = read_data['chromosome'].unique()
@@ -61,7 +61,7 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     
     embedding_sources = {sample_source.name:sample_source,cell_map_source.name:cell_map_source}
 
-    label_cols = ['sample_id','read_index','chromosome','tumor_read']
+    label_cols = ['read_index','chromosome','tumor_read']
     key_cols = ['read_index']
     
     train_read_data = read_data.filter(pl.col("chromosome").is_in(train_chromosomes))
@@ -73,7 +73,7 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     test_dataset_builder = ReadDatasetBuilder(test_read_data,label_cols,key_cols,embedding_sources)
     val_dataset_builder = ReadDatasetBuilder(val_read_data,label_cols,key_cols,embedding_sources)
     
-    return ROCITTrainStore(train_dataset_builder.build(),val_dataset_builder.build(),test_dataset_builder.build(),embedding_sources)
+    return ROCITTrainStore(train_dataset_builder.build(cache_dir=cache_dir),val_dataset_builder.build(cache_dir=cache_dir),test_dataset_builder.build(cache_dir=cache_dir),embedding_sources)
 
 def training_wrapper(sample_id:str,
         labelled_data:pl.DataFrame,
@@ -81,8 +81,9 @@ def training_wrapper(sample_id:str,
         cell_atlas:pl.DataFrame,
         val_chromosomes:List[str],
         test_chromosomes:List[str],
-        output_dir:Path):
-    rocit_dataset = get_sample_train_dataset(labelled_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes)
+        output_dir:Path,
+        cache_dir:Path):
+    rocit_dataset = get_sample_train_dataset(labelled_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes,cache_dir)
     return train(rocit_dataset,output_dir,sample_id)
     
 def train(rocit_dataset,log_dir,experiment_name,training_params=None):
@@ -144,6 +145,38 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
     return ROCITTrainResult(best_checkpoint_path,log_dir)
 
 
+def get_sample_inference_store(
+        read_store:List[pl.DataFrame],
+        sample_distribution:pl.DataFrame,
+        cell_atlas:pl.DataFrame,
+        cache_dir:Path):
+    
+    sample_source = EmbeddingStore('sample_distribution',sample_distribution,['chromosome','position'])
+    cell_map_source = EmbeddingStore('cell_map',cell_atlas,['chromosome','position'])
+    
+    embedding_sources = {sample_source.name:sample_source,cell_map_source.name:cell_map_source}
+
+
+    label_cols = ['read_index','chromosome']
+    key_cols = ['read_index']
+    
+    inference_dataset_builder = ReadDatasetBuilder(read_store,label_cols,key_cols,embedding_sources)
+    inference_dataset = inference_dataset_builder.build(cache_dir=cache_dir)
+    
+    return ROCITInferenceStore(inference_dataset,embedding_sources)
+def predict_wrapper(sample_id:str,
+        train_result:Path,
+        read_store:List[pl.DataFrame],
+        sample_distribution:pl.DataFrame,
+        cell_atlas:pl.DataFrame,
+        output_dir:Path,
+        cache_dir:Path):
+    
+    inference_store = get_sample_inference_store(read_store,sample_distribution,cell_atlas,cache_dir)
+    predictions = predict(inference_store,train_result)
+
+    out_path = output_dir/f"{sample_id}_tumor_origin_predictions.parquet"
+    predictions.write_parquet(out_path)
 def predict(inference_datastore,training_result,inference_batch_size:int=1024):
     torch.set_float32_matmul_precision('medium') 
     model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
