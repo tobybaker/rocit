@@ -12,9 +12,18 @@ from datasets import Dataset as HFDataset, Features, Sequence, Value
 
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from rocit.constants import HUMAN_CHROMOSOME_ENUM
 
 from typing import Optional
+
+from rocit.validation import (
+    FLOAT_TYPES,
+    INTEGER_TYPES,
+    ID_TYPES,
+    STRING_TYPES,
+    validate_chromosome_values,
+    validate_columns,
+)
 class EmbeddingStore:
     def __init__(self,name,embedding_df,key_cols):
         self.name = name
@@ -27,18 +36,17 @@ class EmbeddingStore:
         return self.name
     
     def _validate_embedding_df(self,embedding_df):
-        for col in self.key_cols:
-            if not col in embedding_df.columns:
-                raise ValueError(f'{col} should be an key column for {self.name} but it is not present!')
-        n_data_cols = 0
-        for col in embedding_df.columns:
-            if col in self.key_cols:
-                continue
-            n_data_cols +=1
-            if not embedding_df[col].dtype.is_numeric():
-                raise ValueError(f'{col} is a data column for {self.name} but it is not numeric')
-        if n_data_cols ==0:
+        data_cols = [col for col in embedding_df.columns if not col in self.key_cols]
+
+        if len(data_cols) ==0:
             raise ValueError(f'{self.name} has no data columns')
+       
+        col_format = {col:ID_TYPES for col in self.key_cols}
+        col_format.update({col:FLOAT_TYPES for col in data_cols})
+        
+        validate_columns(embedding_df, f"embedding {self.name}", col_format)
+        validate_chromosome_values(embedding_df,f"embedding {self.name}")
+
         if embedding_df.select(self.key_cols).is_duplicated().any():
             raise ValueError(f'{self.name} should be unique up to {"-".join(self.key_cols)}')
 
@@ -47,6 +55,7 @@ class EmbeddingStore:
         embedding_df = embedding_df.drop([c for c in embedding_df.columns if c.startswith("__index_level_")])
         
         self._validate_embedding_df(embedding_df)
+        embedding_df = embedding_df.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
         embedding_df = embedding_df.sort(self.key_cols)
         embedding_df = embedding_df.with_columns(
             pl.arange(1, len(embedding_df) + 1, dtype=pl.Int32).alias(self.index_col)
@@ -87,23 +96,21 @@ class ReadDatasetBuilder:
         
 
     def _validate_read_df(self, read_df: pl.DataFrame):
-        required_cols = ['chromosome', 'position', 'read_position', 'methylation', 'read_index']
+
+        validate_columns(read_df, "read_dataframe", {
+            "chromosome": STRING_TYPES,
+            "position": INTEGER_TYPES,
+            "read_position": INTEGER_TYPES,
+            "methylation": INTEGER_TYPES,
+            'read_index':ID_TYPES
+        })
         
-
-        for col in required_cols:
-            if col not in read_df.columns:
-                raise ValueError(f'{col} needs to be in read data')
-
+        validate_chromosome_values(read_df,f"read df")
         non_nullable_columns = ['read_index', 'chromosome', 'methylation', 'read_position']
 
         for col in non_nullable_columns:
             if read_df[col].is_null().any():
                 raise ValueError(f'{col} should not have any NA values')
-
-
-        if read_df['methylation'].dtype not in pl.INTEGER_DTYPES:
-            raise ValueError('Methylation column should be integer')
-
 
         if not read_df['methylation'].is_between(0, 255).all():
             raise ValueError('Methylation column should only have values between 0 and 255')
@@ -140,25 +147,23 @@ class ReadDatasetBuilder:
     def _process_read_df(self,read_df:pl.DataFrame):
         read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
         self._validate_read_df(read_df)
+        read_df = read_df.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
 
         drop_cols = ['supplementary_alignment','read_count','strand']
         read_df = read_df.drop(drop_cols,strict=False)
         
-        for source_name,embedding_source in self.embedding_sources.items():
+        for embedding_source in self.embedding_sources.values():
             read_df = embedding_source.merge_with_read_df(read_df)
-        
-        
-        n_indexes =read_df.select( pl.struct(self.key_cols).n_unique()).item()
+
         read_groups = read_df.partition_by(self.key_cols, maintain_order=False)
     
-        
         for i, read_index_df in enumerate(read_groups):
             yield self._get_processed_read_index_data(read_index_df)
   
 
     def _read_generator(self):
         read_df_store = self.read_df_store if isinstance(self.read_df_store, list) else [self.read_df_store]
-        read_data = {}
+        
         for read_df in read_df_store:
             for read_index_data in self._process_read_df(read_df):
                 yield read_index_data

@@ -11,7 +11,7 @@ from rocit.config import (
     validate_train_config, validate_predict_config, validate_run_config,
 )
 from typing import Any,Optional, List
-
+from rocit.constants import HUMAN_CHROMOSOME_ENUM
 _IO_READERS: dict[str, tuple] = {
     ".csv": (pl.read_csv, pl.scan_csv),
     ".tsv": (
@@ -31,7 +31,7 @@ SUPPORTED_EXTENSIONS = sorted(_IO_READERS.keys())
 
 # Define your standard schema expectations here
 STANDARD_CASTS = {
-    "chromosome": pl.Categorical,
+    "chromosome": HUMAN_CHROMOSOME_ENUM,
 }
 
 class ValidationError(Exception):
@@ -61,7 +61,7 @@ def _enforce_standard_schema(df: pl.DataFrame) -> pl.DataFrame:
     cast_targets = {
         col: dtype 
         for col, dtype in STANDARD_CASTS.items() 
-        if col in df.columns
+        if col in df.collect_schema().names()
     }
     
     # 2. Apply casts only if there's work to do
@@ -174,7 +174,7 @@ def preprocess(config_path: Path) -> None:
     variants_path = resolve_file(cfg.variants)
     haplotags_path = resolve_file(cfg.haplotags)
     haploblocks_path = resolve_file(cfg.haploblocks)
-    cluster_labels_path = resolve_file(cfg.cluster_labels)
+    snv_clusters_path = resolve_file(cfg.snv_clusters)
     output_dir = resolve_dir(cfg.output_dir, must_exist=False)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -186,12 +186,12 @@ def preprocess(config_path: Path) -> None:
     sample_haplotags = read_dataframe(haplotags_path)
     sample_haploblocks = read_dataframe(haploblocks_path)
     
-    cluster_labels = read_dataframe(cluster_labels_path)
+    snv_clusters = read_dataframe(snv_clusters_path)
 
     snv_cluster_assignments: pl.DataFrame | None = None
-    if cfg.snv_clusters is not None:
-        snv_clusters_path = resolve_file(cfg.snv_clusters)
-        snv_cluster_assignments = read_dataframe(snv_clusters_path)
+    if cfg.snv_cluster_assignments is not None:
+        snv_cluster_assignments_path = resolve_file(cfg.snv_cluster_assignments)
+        snv_cluster_assignments = read_dataframe(snv_cluster_assignments_path)
 
     somatic_data = tumor_data_labeller.ROCITSomaticData(
         sample_id=cfg.sample_id,
@@ -201,7 +201,7 @@ def preprocess(config_path: Path) -> None:
         sample_variants=sample_variants,
         sample_haplotags=sample_haplotags,
         sample_haploblocks=sample_haploblocks,
-        cluster_labels=cluster_labels,
+        snv_clusters=snv_clusters,
         snv_cluster_assignments=snv_cluster_assignments,
     )
 
@@ -224,7 +224,7 @@ def predict(config_path: Path):
     cfg = load_config(PredictConfig, config_path)
     validate_predict_config(cfg)
 
-    train_result_path = resolve_file(cfg.train_result)
+    best_checkpoint_path = resolve_file(cfg.best_checkpoint_path)
     sample_distribution_path = resolve_file(cfg.sample_distribution)
     cell_atlas_path = resolve_file(cfg.cell_atlas)
     output_dir = resolve_dir(cfg.output_dir, must_exist=False)
@@ -245,14 +245,11 @@ def predict(config_path: Path):
     sample_distribution = read_dataframe(sample_distribution_path)
     cell_atlas = read_dataframe(cell_atlas_path)
 
-    train_result = ROCITTrainResult(
-        best_checkpoint_path=train_result_path,
-        log_dir=train_result_path.parent,
-    )
+
 
     predict_wrapper(
         sample_id=cfg.sample_id,
-        train_result=train_result,
+        best_checkpoint_path=best_checkpoint_path,
         read_store=read_store,
         sample_distribution=sample_distribution,
         cell_atlas=cell_atlas,
@@ -373,7 +370,7 @@ def run(config_path: Path):
     variants_path = resolve_file(cfg.variants)
     haplotags_path = resolve_file(cfg.haplotags)
     haploblocks_path = resolve_file(cfg.haploblocks)
-    cluster_labels_path = resolve_file(cfg.cluster_labels)
+    snv_clusters_path = resolve_file(cfg.snv_clusters)
     cell_atlas_path = resolve_file(cfg.cell_atlas)
     output_dir = resolve_dir(cfg.output_dir, must_exist=False)
     cache_dir = resolve_dir(cfg.cache_dir, must_exist=False)
@@ -381,8 +378,8 @@ def run(config_path: Path):
     bam_index_path = resolve_file(cfg.bam_index) if cfg.bam_index else None
 
     snv_cluster_assignments: pl.DataFrame | None = None
-    if cfg.snv_clusters is not None:
-        snv_cluster_assignments = read_dataframe(resolve_file(cfg.snv_clusters))
+    if cfg.snv_cluster_assignments is not None:
+        snv_cluster_assignments = read_dataframe(resolve_file(cfg.snv_cluster_assignments))
 
     # Create output subdirectories
     methylation_dir = output_dir / "methylation"
@@ -420,7 +417,7 @@ def run(config_path: Path):
         sample_variants=read_dataframe(variants_path),
         sample_haplotags=read_dataframe(haplotags_path),
         sample_haploblocks=read_dataframe(haploblocks_path),
-        cluster_labels=read_dataframe(cluster_labels_path),
+        snv_clusters=read_dataframe(snv_clusters_path),
         snv_cluster_assignments=snv_cluster_assignments,
     )
     labelled_reads = tumor_data_labeller.make_read_labels(somatic_data)

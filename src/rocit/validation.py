@@ -1,16 +1,10 @@
-"""Generic validation primitives.
-
-All functions in this module are reusable validators: they raise on failure
-and return None on success, with no side effects or data transformation.
-"""
-
 from pathlib import Path
 from typing import Sequence
 
 import polars as pl
 import pysam
 
-from constants import HUMAN_CHROMOSOMES
+from rocit.constants import HUMAN_CHROMOSOMES
 
 
 INTEGER_TYPES: list[type[pl.DataType]] = [
@@ -19,15 +13,16 @@ INTEGER_TYPES: list[type[pl.DataType]] = [
 ]
 
 FLOAT_TYPES: list[type[pl.DataType]] = [
-    pl.Float32, pl.Float64,
+    pl.Float16,pl.Float32, pl.Float64,
 ]
 
 NUMERIC_TYPES: list[type[pl.DataType]] = INTEGER_TYPES + FLOAT_TYPES
 
 STRING_TYPES: list[type[pl.DataType]] = [
-    pl.Utf8, pl.String,
+    pl.Utf8, pl.String,pl.Categorical,pl.Enum
 ]
 
+ID_TYPES: list[type[pl.DataType]] = INTEGER_TYPES + STRING_TYPES
 def validate_columns(
     df: pl.DataFrame,
     df_name: str,

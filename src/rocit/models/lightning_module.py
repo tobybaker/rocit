@@ -23,17 +23,19 @@ class ROCITModel(L.LightningModule):
         model_dim:int,
         model_heads:int,
         model_layers:int,
-        lr: float| None=None,
-        warmup_steps: int| None = None,
-        threshold: float = 0.5,
-        sample_distribution_dim:int=19,
-        cell_map_dim:int=84,
-        noise_level:float=0.02
+        lr: float,
+        warmup_steps: int,
+        threshold:float,
+        sample_distribution_dim:int,
+        cell_map_dim:int,
+        noise_level:float,
+        seq_length:int,
+        dropout_rate:float
     ):
         super().__init__()
 
         # ---- Core components ----
-        self.model = ROCITClassifier(model_dim,model_heads,model_layers,sample_distribution_dim=sample_distribution_dim,cell_map_dim=cell_map_dim,noise_level=noise_level)
+        self.model = ROCITClassifier(model_dim,model_heads,model_layers,sample_distribution_dim=sample_distribution_dim,cell_map_dim=cell_map_dim,noise_level=noise_level,dropout_rate=dropout_rate,seq_length=seq_length)
         self.lr = lr
         self.warmup_steps = warmup_steps
         self.threshold = threshold
@@ -136,7 +138,6 @@ class ROCITModel(L.LightningModule):
         probs = torch.sigmoid(logits)
 
         return_dict= {
-            "sample_id": batch['sample_id'],
             "read_index": batch['read_index'],
             "chromosome": batch['chromosome'],
             "tumor_probability": probs.numpy(force=True)

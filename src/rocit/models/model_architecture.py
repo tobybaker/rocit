@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+
+
 class SparseEmbeddingBlock(nn.Module):
     def __init__(self, dim:int,missing_idx:int=0):
         super().__init__()
@@ -16,6 +18,8 @@ class SparseEmbeddingBlock(nn.Module):
         """Call once per dataset before any forward passes."""
         embedding = embedding_source.get_embedding_vector().to(self.impute_values.device)
         
+        if embedding.shape[1] != self.dim:
+            raise ValueError(f'Embedding block expected to have dimension {self.dim} but received {embedding.shape[1]}')
 
         nan_mask = torch.isnan(embedding)
         embedding_clean = embedding.clone()
@@ -45,7 +49,7 @@ class SparseEmbeddingBlock(nn.Module):
 class ROCITClassifier(nn.Module):
 
     SCALE_CONSTANT:float = 0.05
-    def __init__(self, emb, n_heads, n_blocks,seq_length=511,dropout_rate=0.0,sample_distribution_dim=19,cell_map_dim=84,noise_level=0.02):
+    def __init__(self, emb:int, n_heads:int, n_blocks:int,seq_length:int,dropout_rate:float,sample_distribution_dim:int,cell_map_dim:int,noise_level:float):
         super().__init__()
 
         self.sample_distribution_dim = sample_distribution_dim

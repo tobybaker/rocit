@@ -106,9 +106,9 @@ def prepare_haploblocks(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-def prepare_cluster_labels(df: pl.DataFrame) -> pl.DataFrame:
-    """Validate and prepare cluster_labels."""
-    validate_columns(df, "cluster_labels", {
+def prepare_snv_clusters(df: pl.DataFrame) -> pl.DataFrame:
+    """Validate and prepare snv_clusters."""
+    validate_columns(df, "snv_clusters", {
         "cluster_id": ID_TYPES,
         "cluster_ccf": FLOAT_TYPES,
         "cluster_fraction": FLOAT_TYPES,
@@ -137,7 +137,7 @@ def prepare_somatic_data(obj) -> None:
     obj.sample_variants = prepare_variants(obj.sample_variants)
     obj.sample_haplotags = prepare_haplotags(obj.sample_haplotags)
     obj.sample_haploblocks = prepare_haploblocks(obj.sample_haploblocks)
-    obj.cluster_labels = prepare_cluster_labels(obj.cluster_labels)
+    obj.snv_clusters = prepare_snv_clusters(obj.snv_clusters)
 
     if obj.snv_cluster_assignments is not None:
         obj.snv_cluster_assignments = prepare_snv_cluster_assignments(

@@ -32,9 +32,9 @@ def join_with_max_overlap(left_df,right_df,left_start_col:str,left_end_col:str,r
     joined_df = joined_df.rename({right_start_col_r:right_start_col,right_end_col_r:right_end_col})
 
     return joined_df
-def get_loh_table(pretrain_data,max_major_cn:int=4,min_segment_length=1e6):
+def get_loh_table(somatic_data,max_major_cn:int=4,min_segment_length=1e6):
     
-    loh_table =  pretrain_data.sample_copy_number.filter((pl.col('minor_cn')==0))
+    loh_table =  somatic_data.sample_copy_number.filter((pl.col('minor_cn')==0))
     loh_table = loh_table.filter(pl.col('major_cn').is_between(1,max_major_cn))
     
     valid_chromosomes = [f'chr{x}' for x in range(1,23)]
@@ -43,8 +43,8 @@ def get_loh_table(pretrain_data,max_major_cn:int=4,min_segment_length=1e6):
     loh_table = loh_table.filter(pl.col('segment_length')>min_segment_length)
     return loh_table
 
-def get_haploblocks(pretrain_data,min_block_size=5e5):
-    haploblocks = pretrain_data.sample_haploblocks
+def get_haploblocks(somatic_data,min_block_size=5e5):
+    haploblocks = somatic_data.sample_haploblocks
     haploblocks = haploblocks.filter(pl.col('block_size')>=min_block_size)
     haploblocks = haploblocks.drop(['n_variants'])
     return haploblocks
@@ -104,17 +104,17 @@ def get_min_haplotags(read_table,block_cols):
     return block_df.select(['block_id','min_haplotag'])
 
 
-def get_tumor_labelled_reads(pretrain_data):
-    loh_table = get_loh_table(pretrain_data)
-    sample_haploblocks = get_haploblocks(pretrain_data)
+def get_tumor_labelled_reads(somatic_data):
+    loh_table = get_loh_table(somatic_data)
+    sample_haploblocks = get_haploblocks(somatic_data)
     
     read_store = []
     for cn_row in loh_table.iter_rows(named=True):
 
         minor_cn_share = get_minor_cn_share(cn_row)
-        read_table = bam_tools.get_reads_from_cn_row(cn_row,pretrain_data.sample_bam_path)
+        read_table = bam_tools.get_reads_from_cn_row(cn_row,somatic_data.sample_bam_path)
         
-        read_table = read_table.join(pretrain_data.sample_haplotags.drop('block_id'),how='inner',on=['chromosome','read_index'])
+        read_table = read_table.join(somatic_data.sample_haplotags.drop('block_id'),how='inner',on=['chromosome','read_index'])
         
         
         cn_haploblocks = sample_haploblocks.filter(pl.col('chromosome')==cn_row['chromosome'])

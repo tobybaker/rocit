@@ -139,7 +139,7 @@ def process_chromosome(
     # Accumulate data in lists for efficient Polars DataFrame construction
     read_counts: list[int] = []
     read_indexes: list[str] = []
-    is_supplementary: list[bool] = []
+    supplementary_alignment: list[bool] = []
     chromosomes: list[str] = []
     positions: list[int | None] = []
     read_positions: list[int] = []
@@ -165,7 +165,7 @@ def process_chromosome(
 
             read_counts.extend([alignment_counter] * n_sites)
             read_indexes.extend([read.query_name] * n_sites)
-            is_supplementary.extend([read.is_supplementary] * n_sites)
+            supplementary_alignment.extend([read.supplementary_alignment] * n_sites)
             chromosomes.extend([chromosome] * n_sites)
             positions.extend(ref_pos)
             read_positions.extend(read_pos)
@@ -177,7 +177,7 @@ def process_chromosome(
     df = pl.DataFrame({
         "read_count": read_counts,
         "read_index": read_indexes,
-        "is_supplementary": is_supplementary,
+        "supplementary_alignment": supplementary_alignment,
         "chromosome": chromosomes,
         "position": positions,
         "read_position": read_positions,

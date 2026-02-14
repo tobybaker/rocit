@@ -5,25 +5,6 @@ from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_soma
 from pathlib import Path
 from dataclasses import dataclass
 
-'''
-
-# Define clonal cluster criteria
-    is_clonal = (
-        pl.col("location").is_between(min_clonal_cluster, max_clonal_cluster)
-        & (pl.col("frac_mutations") > min_clonal_fraction)
-    )
-    is_above_clonal = pl.col("location") >= max_clonal_cluster
-
-    # Assign cluster labels
-    cluster_label_expr = (
-        pl.when(is_clonal).then(pl.lit("Pass_Clonal"))
-        .when(is_above_clonal).then(pl.lit("Fail"))
-        .otherwise(pl.lit("Pass"))
-        .alias("cluster_label")
-    )
-    cluster_info = cluster_info.with_columns(cluster_label_expr)
-
-'''
 @dataclass
 class ROCITSomaticData:
     sample_id:str
@@ -33,7 +14,7 @@ class ROCITSomaticData:
     sample_variants:pl.DataFrame
     sample_haplotags:pl.DataFrame
     sample_haploblocks:pl.DataFrame
-    cluster_labels:pl.DataFrame
+    snv_clusters:pl.DataFrame
     snv_cluster_assignments: pl.DataFrame| None = None
 
     def save(self, path: str):
@@ -51,11 +32,11 @@ class ROCITSomaticData:
     
 
 
-def make_read_labels(pretrain_data):
+def make_read_labels(somatic_data):
 
-    snv_labelled_reads = snv_data_labeller.get_tumor_labelled_reads(pretrain_data)
+    snv_labelled_reads = snv_data_labeller.get_tumor_labelled_reads(somatic_data)
     
-    loh_labelled_reads = loh_data_labeller.get_tumor_labelled_reads(pretrain_data)
+    loh_labelled_reads = loh_data_labeller.get_tumor_labelled_reads(somatic_data)
     
     read_labels = pl.concat([snv_labelled_reads,loh_labelled_reads])
     read_labels = read_labels.unique(subset=['read_index'], keep='none', maintain_order=False)

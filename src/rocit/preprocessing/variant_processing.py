@@ -4,6 +4,40 @@ from pathlib import Path
 
 from scipy.stats import binom
 from scipy.special import logsumexp
+
+class ClusterValidationError(Exception):
+    ''' Raises if clusters don't pass QC'''
+
+def _validate_cluster_labels(cluster_labels:pl.DataFrame,max_fail_fraction:float=0.2) -> None:
+
+    unique_cluster_labels = cluster_labels['cluster_label'].unique()
+    if not 'pass_clonal' in unique_cluster_labels:
+        raise ClusterValidationError(f'Provided SNVs clusters do not contain a clonal peak')
+    fail_clusters = cluster_labels.filter(pl.col('cluster_label')=='fail')
+    if fail_clusters['cluster_fraction'].sum()>=max_fail_fraction:
+        raise ClusterValidationError(f"{fail_clusters['cluster_fraction'].sum():.1%} of SNVs are in fail cluster. This is more than the permitted {max_fail_fraction:.1%}.")
+def label_snv_clusters(snv_clusters:pl.DataFrame,min_clonal_cluster:float=0.9,max_clonal_cluster:float=1.1,min_clonal_fraction:float=0.3)-> pl.DataFrame:
+    cluster_label_enum = pl.Enum(['pass_clonal','pass','fail'])
+    # Define clonal cluster criteria
+    is_clonal = (
+        pl.col("cluster_ccf").is_between(min_clonal_cluster, max_clonal_cluster)
+        & (pl.col("cluster_fraction") > min_clonal_fraction)
+    )
+    is_above_clonal = pl.col("cluster_ccf") >= max_clonal_cluster
+
+    # Assign cluster labels
+    cluster_label_expr = (
+        pl.when(is_clonal).then(pl.lit("pass_clonal"))
+        .when(is_above_clonal).then(pl.lit("fail"))
+        .otherwise(pl.lit("pass"))
+        .alias("cluster_label").cast(cluster_label_enum)
+    )
+    cluster_labels = snv_clusters.with_columns(cluster_label_expr)
+
+    _validate_cluster_labels(cluster_labels)
+    return cluster_labels
+
+
 def get_snv_cluster_assignments_binomial(cluster_labels,variant_data):
 
     mult_one_vaf = variant_data['purity']/(variant_data['purity']*variant_data['total_cn'] +(1-variant_data['purity'])*variant_data['normal_total_cn'])
@@ -53,14 +87,17 @@ def get_variant_cn(variant_data,sample_cn):
     snv_data = snv_data.filter(pl.col('segment_end')>=pl.col('position'))
 
     return variant_data.join(snv_data,how='inner',on=['chromosome','position'])
-def load_labelled_variants(pretrain_data):
+def load_labelled_variants(somatic_data):
     
-    variant_data_with_cn = get_variant_cn(pretrain_data.sample_variants,pretrain_data.sample_copy_number)
-    variant_data = pretrain_data.sample_variants.join(variant_data_with_cn,on=['chromosome','position'],how='inner')
-   
-    if pretrain_data.snv_cluster_assignments is None:
-        snv_cluster_assignments = get_snv_cluster_assignments_binomial(pretrain_data.cluster_labels,variant_data_with_cn)
+    variant_data_with_cn = get_variant_cn(somatic_data.sample_variants,somatic_data.sample_copy_number)
+    variant_data = somatic_data.sample_variants.join(variant_data_with_cn,on=['chromosome','position'],how='inner')
+    cluster_labels = label_snv_clusters(somatic_data.snv_clusters)
+    
+    if somatic_data.snv_cluster_assignments is None:
+        snv_cluster_assignments = get_snv_cluster_assignments_binomial(cluster_labels,variant_data_with_cn)
     else:
-        snv_cluster_assignments = pretrain_data.snv_cluster_assignments
+        snv_cluster_assignments = somatic_data.snv_cluster_assignments
+        snv_cluster_assignments = snv_cluster_assignments.join(cluster_labels,how='inner',on=['cluster_id'])
+    
     variant_data = variant_data.join(snv_cluster_assignments,how='inner',on=['chromosome','position'])
     return variant_data

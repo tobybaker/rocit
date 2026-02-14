@@ -168,7 +168,7 @@ def get_sample_inference_store(
     
     return ROCITInferenceStore(inference_dataset,embedding_sources)
 def predict_wrapper(sample_id:str,
-        train_result:Path,
+        best_checkpoint_path:Path,
         read_store:List[pl.DataFrame],
         sample_distribution:pl.DataFrame,
         cell_atlas:pl.DataFrame,
@@ -176,14 +176,14 @@ def predict_wrapper(sample_id:str,
         cache_dir:Path):
     
     inference_store = get_sample_inference_store(read_store,sample_distribution,cell_atlas,cache_dir)
-    predictions = predict(inference_store,train_result)
+    predictions = predict(inference_store,best_checkpoint_path)
 
     out_path = output_dir/f"{sample_id}_tumor_origin_predictions.parquet"
     predictions.write_parquet(out_path)
 
-def predict(inference_datastore,training_result,inference_batch_size:int=1024):
+def predict(inference_datastore,best_checkpoint_path,inference_batch_size:int=1024):
     torch.set_float32_matmul_precision('medium') 
-    model = ROCITModel.load_from_checkpoint(training_result.best_checkpoint_path)
+    model = ROCITModel.load_from_checkpoint(best_checkpoint_path)
     model.model.set_embedding_context(inference_datastore.embedding_sources)
     trainer =L.Trainer(accelerator="auto", devices=1)
 

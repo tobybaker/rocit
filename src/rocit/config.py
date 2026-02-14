@@ -32,7 +32,7 @@ class TrainConfig:
 class PredictConfig:
     """Configuration for ``rocit predict``."""
     sample_id: str
-    train_result: str
+    best_checkpoint_path: str
     sample_distribution: str
     cell_atlas: str
     output_dir: str
@@ -51,9 +51,9 @@ class PreprocessConfig:
     variants: str
     haplotags: str
     haploblocks: str
-    cluster_labels: str
+    snv_clusters: str
     output_dir: str
-    snv_clusters: Optional[str] = None
+    snv_cluster_assignments: Optional[str] = None
 
 
 @dataclass
@@ -65,13 +65,13 @@ class RunConfig:
     variants: str
     haplotags: str
     haploblocks: str
-    cluster_labels: str
+    snv_clusters: str
     cell_atlas: str
     val_chromosomes: list[str]
     test_chromosomes: list[str]
     output_dir: str
     bam_index: Optional[str] = None
-    snv_clusters: Optional[str] = None
+    snv_cluster_assignments: Optional[str] = None
     min_mapq: int = 0
     workers: int = 1
     chromosomes: Optional[list[str]] = None

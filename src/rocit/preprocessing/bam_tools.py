@@ -1,6 +1,6 @@
 import polars as pl
 import pysam
-
+from rocit.constants import HUMAN_CHROMOSOME_ENUM
 def should_filter_read(read) -> bool:
     if read.is_unmapped:
         return True
@@ -33,7 +33,7 @@ def get_reads_from_cn_row(region_row,bam_filepath):
             read_data.append(read_entry)
             
     read_data = pl.DataFrame(read_data)
-    read_data =read_data.with_columns(pl.col('chromosome').cast(pl.Categorical),pl.col('read_start').cast(pl.Int32),pl.col('read_end').cast(pl.Int32))
+    read_data =read_data.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM),pl.col('read_start').cast(pl.Int32),pl.col('read_end').cast(pl.Int32))
 
     return read_data
 def pileup_read_contains_snv(pileup_read,vcf_row):
@@ -87,5 +87,5 @@ def get_variant_reads(vcf_row,bam_filepath):
                 read_store.append(read_data)
                 
     read_store= pl.DataFrame(read_store)
-    read_store =read_store.with_columns(pl.col('chromosome').cast(pl.Categorical))
+    read_store =read_store.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
     return read_store.drop_nulls()
