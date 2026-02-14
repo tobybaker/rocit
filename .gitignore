@@ -27,3 +27,6 @@ examples/
 #SLURM files
 *.out
 *.err
+
+src/rocit/preprocessing/make_labelled_parquets_loh.py
+src/rocit/preprocessing/make_labelled_parquets.py
