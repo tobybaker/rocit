@@ -89,6 +89,16 @@ def prepare_haplotags(df: pl.DataFrame) -> pl.DataFrame:
         "read_index": ID_TYPES,
         "haplotag": ID_TYPES
     })
+
+    # Validate haplotag values are only 1 or 2
+    unique_haplotags = df["haplotag"].unique().sort()
+    invalid_haplotags = unique_haplotags.filter(~pl.col("haplotag").is_in([1, 2]))
+    if len(invalid_haplotags) > 0:
+        raise ValueError(
+            f"sample_haplotags: 'haplotag' column must only contain values 1 or 2. "
+            f"Found invalid values: {invalid_haplotags.to_list()}"
+        )
+
     df = prepare_chromosome_column(df, "haplotags")
     return df
 
