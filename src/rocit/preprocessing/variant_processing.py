@@ -50,7 +50,7 @@ def get_snv_cluster_assignments_binomial(cluster_labels,variant_data):
 
         
         for mult in range(1,max_mult+1):
-            peak_name = f'{cluster_row["cluster_label"]}-{cluster_row["cluster"]}-{mult}'
+            peak_name = f'{cluster_row["cluster_label"]}-{cluster_row["cluster_id"]}-{mult}'
             peak_frac = cluster_row['cluster_ccf']*mult*mult_one_vaf
             
             mult_prob = binom.logpmf(variant_data['tumor_alt_count'],variant_coverage,peak_frac)

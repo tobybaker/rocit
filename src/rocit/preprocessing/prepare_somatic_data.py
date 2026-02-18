@@ -92,7 +92,7 @@ def prepare_haplotags(df: pl.DataFrame) -> pl.DataFrame:
 
     # Validate haplotag values are only 1 or 2
     unique_haplotags = df["haplotag"].unique().sort()
-    invalid_haplotags = unique_haplotags.filter(~pl.col("haplotag").is_in([1, 2]))
+    invalid_haplotags = unique_haplotags.filter(~unique_haplotags.is_in([1, 2]))
     if len(invalid_haplotags) > 0:
         raise ValueError(
             f"sample_haplotags: 'haplotag' column must only contain values 1 or 2. "

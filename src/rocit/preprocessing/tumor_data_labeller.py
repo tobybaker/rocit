@@ -4,7 +4,7 @@ import numpy as np
 from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_somatic_data
 from pathlib import Path
 from dataclasses import dataclass
-
+from rocit.constants import HUMAN_CHROMOSOME_ENUM
 @dataclass
 class ROCITSomaticData:
     sample_id:str
@@ -52,7 +52,7 @@ def load_methylation_df(in_path):
 
 def get_subsampled_methylation_data(sample_methylation_dir,subsample_rate=0.05,seed=123456):
     subsampled_store =[]
-    for in_path in sample_methylation_dir.glob('cpg_methylation_data*.parquet'):
+    for in_path in sample_methylation_dir.glob('*cpg_methylation.parquet'):
         in_df = load_methylation_df(in_path)
         read_indices = in_df.select(['chromosome','read_index']).unique().collect()
         sampled_read_indices = read_indices.sample(fraction=subsample_rate,seed=seed)
@@ -63,9 +63,10 @@ def get_subsampled_methylation_data(sample_methylation_dir,subsample_rate=0.05,s
     
 def get_labelled_methylation_data(sample_methylation_dir,read_labels):
     labelled_data_store = []
-    read_labels = read_labels.lazy()
-    for in_path in sample_methylation_dir.glob('cpg_methylation_data*.parquet'):
-        in_df = load_methylation_df(in_path)
+    read_labels = read_labels.lazy().with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM),pl.col('read_index').cast(pl.Categorical))
+    for in_path in sample_methylation_dir.glob('*_cpg_methylation.parquet'):
+        in_df = load_methylation_df(in_path).with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
+       
         in_df = in_df.join(read_labels,on=['chromosome','read_index'],how='inner')
         labelled_data_store.append(in_df)
     labelled_data = pl.concat(labelled_data_store)
