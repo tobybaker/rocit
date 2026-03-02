@@ -4,15 +4,12 @@ from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
+from rocit.constants import HUMAN_CHROMOSOMES
 
 # PacBio encodes 5mC at CpG contexts; forward strand maps to C at position 0,
 # reverse strand to C at position 1 (the G on the reference becomes C on the read)
 FORWARD_CPG_MODIFICATION_INDEX = ('C', 0, 'm')
 REVERSE_CPG_MODIFICATION_INDEX = ('C', 1, 'm')
-
-# Standard human chromsoomes
-HUMAN_STANDARD_CHROMOSOMES = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
-
 
 def get_cpg_modification_index(strand: str) -> tuple[str, int, str]:
     """Return the pysam modified_bases key for the given strand."""
@@ -165,7 +162,7 @@ def process_chromosome(
 
             read_counts.extend([alignment_counter] * n_sites)
             read_indexes.extend([read.query_name] * n_sites)
-            supplementary_alignment.extend([read.supplementary_alignment] * n_sites)
+            supplementary_alignment.extend([read.is_supplementary] * n_sites)
             chromosomes.extend([chromosome] * n_sites)
             positions.extend(ref_pos)
             read_positions.extend(read_pos)
@@ -224,7 +221,7 @@ def process_bam(
     """
     #if chromosomes is not none it should be a space separated
     if chromosomes is None:
-        chromosomes = HUMAN_STANDARD_CHROMOSOMES
+        chromosomes = HUMAN_CHROMOSOMES
     else:
         chromosomes = chromosomes
     bam_path = Path(bam_path)

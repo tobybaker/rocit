@@ -85,7 +85,9 @@ def get_variant_reads(vcf_row,bam_filepath):
                 read_data =  {'read_index':pileup_read.alignment.query_name,'contains_snv':contains_snv}
                 read_data.update(vcf_row)
                 read_store.append(read_data)
-                
-    read_store= pl.DataFrame(read_store)
-    read_store =read_store.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
+    if len(read_store) ==0:
+        return None
+    else:
+        read_store= pl.DataFrame(read_store,infer_schema_length=None)
+        read_store =read_store.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
     return read_store.drop_nulls()
