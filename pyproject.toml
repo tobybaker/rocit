@@ -23,7 +23,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "License :: OSI Approved :: BSD Software License",
+    "License :: OSI Approved :: BSD-3-Clause License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -37,6 +37,10 @@ dependencies = [
     "polars>=1.0.0",
     "pysam>=0.22.0",
     "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
     "build>=1.4.0",
     "twine>=6.2.0",
 ]
