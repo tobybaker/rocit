@@ -1,3 +1,5 @@
+__version__ = "0.1.0"
+
 from rocit.pipeline import train,predict,ROCITInferenceStore,ROCITTrainStore,TrainingParams,ROCITTrainResult
 
 __all__ = [

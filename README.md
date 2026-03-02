@@ -6,7 +6,7 @@
 
 **ROCIT** (Read Origin Classifier In Tumors) is a deep learning tool that classifies individual sequencing reads from long-read bulk tumor sequencing as tumor-derived or normal-derived. By leveraging CpG methylation patterns, ROCIT enables read-level resolution of tumor heterogeneity from PacBio sequencing data.
 
-ROCIT currently supports training and prediction on PacBio HiFi Tumor BAMs with methylation tags (MM/ML tags) produced by Jasmine. Oxford Nanopore support is planned for future releases.
+ROCIT currently supports training and prediction on PacBio HiFi Tumor BAMs with CpG methylation probabilities produced by [Jasmine](https://github.com/PacificBiosciences/jasmine). Oxford Nanopore support is planned for future releases.
 
 
 ### How It Works
@@ -181,7 +181,6 @@ snv_cluster_assignments: "data/snv_cluster_assignments.parquet"
 cell_atlas: "reference/cell_atlas.parquet"
 val_chromosomes: ["chr20", "chr21"]
 test_chromosomes: ["chr22"]
-chromosomes: ["chr1", "chr2", "chr3"]
 min_mapq: 0
 workers: 8
 output_dir: "output/"
@@ -501,7 +500,7 @@ Required columns:
 - `chromosome`: Chromosome name
 - `position`: Variant position
 - `cluster_id`: Cluster identifier (must match IDs in SNV Clusters)
-- `n_copies`: Number of copies carrying this variant
+- `n_copies`: Number of allelic copies of the variant.
 
 
 ## License

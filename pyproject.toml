@@ -5,19 +5,46 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+version = { attr = "rocit.__version__" }
+
 [project]
 name = "rocit"
-version = "0.1.0"
+dynamic = ["version"]
+description = "Deep learning classifier for tumor-derived long reads using CpG methylation"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
+authors = [
+    { name = "Toby Baker", email = "tobybaker97@gmail.com" },
+]
+keywords = ["bioinformatics", "cancer", "methylation", "long-read", "deep-learning", "pacbio"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: BSD Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
-    "torch>=2.9.1",
-    "pytorch-lightning>=2.6.0",
+    "torch>=2.0.0",
+    "pytorch-lightning>=2.0.0",
     "pyyaml>=6.0",
     "numpy>=1.24.0",
-    "polars>=1.36.1",
-    "pysam==0.22.1",
-    "click>=8.3.1",
+    "polars>=1.0.0",
+    "pysam>=0.22.0",
+    "click>=8.1.0",
+    "build>=1.4.0",
+    "twine>=6.2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tobybaker/rocit"
+Repository = "https://github.com/tobybaker/rocit"
+"Bug Tracker" = "https://github.com/tobybaker/rocit/issues"
 
 [project.scripts]
 rocit = "rocit.cli:main"
