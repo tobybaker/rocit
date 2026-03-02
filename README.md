@@ -503,16 +503,8 @@ Required columns:
 - `cluster_id`: Cluster identifier (must match IDs in SNV Clusters)
 - `n_copies`: Number of copies carrying this variant
 
-## Citation
-
-If you use ROCIT in your research, please cite:
-
-```
-[Citation to be added upon publication]
-```
 
 ## License
 
-[License information to be added]
-
+ROCIT is licensed under the BSD 3-Clause License. See the [LICENSE](LICENSE) file for details.
 
