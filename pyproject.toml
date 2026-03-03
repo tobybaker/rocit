@@ -31,7 +31,7 @@ classifiers = [
 ]
 dependencies = [
     "torch>=2.0.0",
-    "pytorch-lightning>=2.0.0",
+    "lightning>=2.0.0",
     "pyyaml>=6.0",
     "numpy>=1.24.0",
     "polars>=1.0.0",
