@@ -13,7 +13,7 @@ INTEGER_TYPES: list[type[pl.DataType]] = [
 ]
 
 FLOAT_TYPES: list[type[pl.DataType]] = [
-    pl.Float16,pl.Float32, pl.Float64,
+    pl.Float32, pl.Float64,
 ]
 
 NUMERIC_TYPES: list[type[pl.DataType]] = INTEGER_TYPES + FLOAT_TYPES
