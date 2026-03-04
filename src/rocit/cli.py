@@ -3,14 +3,14 @@ import polars as pl
 from pathlib import Path
 from rocit.preprocessing.extract_pacbio_cpg_info import process_bam
 from rocit.preprocessing import tumor_data_labeller,get_aggregate_methylation_distribution_from_dir
-from rocit.pipeline import training_wrapper,predict_wrapper,ROCITTrainResult
+from rocit.pipeline import training_wrapper,predict_wrapper
 from rocit.config import (
     TrainConfig, PredictConfig, PreprocessConfig, RunConfig,
     load_config, ConfigError,
     resolve_file, resolve_dir,
     validate_train_config, validate_predict_config, validate_run_config,
 )
-from typing import Any,Optional, List
+from typing import Any, Optional
 from rocit.constants import HUMAN_CHROMOSOME_ENUM
 _IO_READERS: dict[str, tuple] = {
     ".csv": (pl.read_csv, pl.scan_csv),
@@ -210,8 +210,8 @@ def preprocess(config_path: Path) -> None:
         methylation_dir, labelled_reads
     )
 
-    labelled_reads.to_parquet(output_dir / 'labelled_reads.parquet')
-    labelled_methylation_data.to_parquet(output_dir / 'labelled_methylation_data.parquet')
+    labelled_reads.write_parquet(output_dir / 'labelled_reads.parquet')
+    labelled_methylation_data.write_parquet(output_dir / 'labelled_methylation_data.parquet')
 
 @main.command()
 @click.option(
@@ -240,6 +240,7 @@ def predict(config_path: Path):
         read_store = [
             read_dataframe(fp, scan=True).filter(~pl.col('supplementary_alignment'))
             for fp in rs_dir.iterdir()
+            if fp.is_file() and fp.suffix.lower() in _IO_READERS
         ]
 
     sample_distribution = read_dataframe(sample_distribution_path)
@@ -268,7 +269,7 @@ def predict(config_path: Path):
     '--sample-bam',
     type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
     required=True,
-    help="Input directory containing *cpg_methylation_data.parquet files."
+    help="Path to a PacBio BAM file."
 )
 @click.option(
     '--output-dir',
@@ -277,7 +278,7 @@ def predict(config_path: Path):
     help="Directory where the output file will be saved."
 )
 @click.option(
-    "--index", 
+    "--index",
     type=click.Path(exists=True, path_type=Path), 
     help="BAM index file path"
 )
@@ -303,13 +304,13 @@ def predict(config_path: Path):
     help="Space separated chromosomes to process (default: chr1-chrY)."
 )
 def extract_bam_methylation(
-    bam: Path, 
+    sample_bam: Path, 
     output_dir: Path, 
     sample_id: str, 
     index: Optional[Path], 
     min_mapq: int, 
     workers: int, 
-    chromosomes: Optional[str]
+    chromosomes: Optional[list[str]]
 ) -> None:
     """Extract CpG methylation from PacBio BAM files"""
     
@@ -319,7 +320,7 @@ def extract_bam_methylation(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_files = process_bam(
-        bam_path=bam,
+        bam_path=sample_bam,
         output_dir=output_dir,
         sample_id=sample_id,
         chromosomes=chroms_arg,
@@ -450,7 +451,7 @@ def run(config_path: Path):
     ]
     predict_wrapper(
         sample_id=cfg.sample_id,
-        train_result=train_result,
+        best_checkpoint_path=train_result.best_checkpoint_path,
         read_store=read_store,
         sample_distribution=sample_distribution,
         cell_atlas=cell_atlas,

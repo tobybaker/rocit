@@ -199,7 +199,7 @@ def process_bam(
     bam_path: str | Path,
     output_dir: str | Path,
     sample_id:str,
-    chromosomes: Optional[str] = None,
+    chromosomes: Optional[list[str]] = None,
     index_path: Optional[str | Path] = None,
     min_mapq: int = 0,
     n_workers: int = 1
@@ -219,11 +219,8 @@ def process_bam(
     Returns:
         List of paths to output parquet files.
     """
-    #if chromosomes is not none it should be a space separated
     if chromosomes is None:
         chromosomes = HUMAN_CHROMOSOMES
-    else:
-        chromosomes = chromosomes
     bam_path = Path(bam_path)
     output_dir = Path(output_dir)
 
