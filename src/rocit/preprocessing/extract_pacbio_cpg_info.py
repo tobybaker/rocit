@@ -113,7 +113,7 @@ def process_chromosome(
     sample_id:str,
     index_path: Optional[str | Path] = None,
     min_mapq: int = 0
-) -> Path:
+) -> Path | None:
     """
     Process a single chromosome and write methylation data to parquet.
     
@@ -190,8 +190,11 @@ def process_chromosome(
         pl.col("methylation").cast(pl.UInt8),
     ])
 
+    if df.is_empty():
+        return None
+
     df.write_parquet(output_path)
-   
+
     return output_path
 
 
@@ -240,19 +243,19 @@ def process_bam(
         chromosomes = [c for c in chromosomes if c in available_chroms]
 
     if n_workers == 1:
-        
-        return [
+        results = [
             process_chromosome(bam_path, chrom, output_dir,sample_id, index_path, min_mapq)
             for chrom in chromosomes
         ]
+    else:
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [
+                executor.submit(
+                    process_chromosome, bam_path, chrom, output_dir,sample_id, index_path, min_mapq
+                )
+                for chrom in chromosomes
+            ]
+            results = [f.result() for f in futures]
 
-    
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        futures = [
-            executor.submit(
-                process_chromosome, bam_path, chrom, output_dir,sample_id, index_path, min_mapq
-            )
-            for chrom in chromosomes
-        ]
-        return [f.result() for f in futures]
+    return [p for p in results if p is not None]
 
