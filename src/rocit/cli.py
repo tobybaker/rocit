@@ -211,7 +211,7 @@ def preprocess(config_path: Path) -> None:
     )
 
     labelled_reads.write_parquet(output_dir / 'labelled_reads.parquet')
-    labelled_methylation_data.write_parquet(output_dir / 'labelled_methylation_data.parquet')
+    labelled_methylation_data.sink_parquet(output_dir / 'labelled_methylation_data.parquet')
 
 @main.command()
 @click.option(
