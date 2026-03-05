@@ -69,12 +69,12 @@ For more control, you can run individual steps:
 
 ```bash
 # 1. Extract methylation from BAM
-rocit extract-bam-methylation --sample-id SAMPLE01 \
+rocit extract-bam-methylation --sample-id SAMPLE_ID \
     --sample-bam aligned.bam \
     --output-dir methylation/
 
 # 2. Compute methylation distribution
-rocit extract-cpg-distribution --sample-id SAMPLE01 \
+rocit extract-cpg-distribution --sample-id SAMPLE_ID \
     --methylation-dir methylation/ \
     --output-dir distribution/
 
@@ -96,9 +96,9 @@ ROCIT uses YAML configuration files for reproducibility and ease of use. Below a
 ### Training Configuration (`train_config.yaml`)
 
 ```yaml
-sample_id: "SAMPLE01"
+sample_id: "SAMPLE_ID"
 labelled_data: "preprocessing/labelled_methylation_data.parquet"
-sample_distribution: "distribution/SAMPLE01_methylation_distribution.parquet"
+sample_distribution: "distribution/SAMPLE_ID_methylation_distribution.parquet"
 cell_atlas: "reference/cell_atlas.parquet"
 val_chromosomes: ["chr20", "chr21"]
 test_chromosomes: ["chr22"]
@@ -119,9 +119,9 @@ cache_dir: "/scratch/"
 ### Prediction Configuration (`predict_config.yaml`)
 
 ```yaml
-sample_id: "SAMPLE01"
-best_checkpoint_path: "training/SAMPLE01/version_0/checkpoints/best-checkpoint.ckpt"
-sample_distribution: "distribution/SAMPLE01_methylation_distribution.parquet"
+sample_id: "SAMPLE_ID"
+best_checkpoint_path: "training/SAMPLE_ID/version_0/checkpoints/best-checkpoint.ckpt"
+sample_distribution: "distribution/SAMPLE_ID_methylation_distribution.parquet"
 cell_atlas: "reference/cell_atlas.parquet"
 read_store_dir: "methylation/"  # OR use read_store for single file
 output_dir: "predictions/"
@@ -140,7 +140,7 @@ cache_dir: "/scratch/"
 ### Preprocessing Configuration (`preprocess_config.yaml`)
 
 ```yaml
-sample_id: "SAMPLE01"
+sample_id: "SAMPLE_ID"
 bam: "data/aligned.bam"
 methylation_dir: "methylation/"
 copy_number: "data/copy_number_segments.parquet"
@@ -169,7 +169,7 @@ output_dir: "preprocessing/"
 ### Full Pipeline Configuration (`run_config.yaml`)
 
 ```yaml
-sample_id: "SAMPLE01"
+sample_id: "SAMPLE_ID"
 bam: "data/aligned.bam"
 bam_index: "data/aligned.bam.bai"
 copy_number: "data/copy_number_segments.parquet"
@@ -284,7 +284,7 @@ Extract CpG methylation from PacBio BAM files.
 
 ```bash
 rocit extract-bam-methylation \
-    --sample-id SAMPLE01 \
+    --sample-id SAMPLE_ID \
     --sample-bam aligned.bam \
     --output-dir methylation/ \
     --workers 8 \
@@ -310,7 +310,7 @@ Aggregate methylation distribution from extracted data.
 
 ```bash
 rocit extract-cpg-distribution \
-    --sample-id SAMPLE01 \
+    --sample-id SAMPLE_ID \
     --methylation-dir methylation/ \
     --output-dir distribution/
 ```
@@ -328,7 +328,7 @@ The primary output from ROCIT is a parquet file with read-level predictions:
 ```python
 import polars as pl
 
-predictions = pl.read_parquet("predictions/SAMPLE01_tumor_origin_predictions.parquet")
+predictions = pl.read_parquet("predictions/SAMPLE_ID_tumor_origin_predictions.parquet")
 print(predictions.head())
 
 # Example output:
@@ -346,7 +346,7 @@ print(predictions.head())
 Training progress is logged to CSV:
 
 ```python
-metrics = pl.read_csv("training/SAMPLE01/version_0/metrics.csv")
+metrics = pl.read_csv("training/SAMPLE_ID/version_0/metrics.csv")
 # Contains: epoch, train_loss, train_auroc, val_loss, val_auroc, etc.
 ```
 
@@ -365,7 +365,7 @@ from pathlib import Path
 
 # Training
 train_result = rocit.train(
-    sample_id="SAMPLE01",
+    sample_id="SAMPLE_ID",
     labelled_data=labelled_df,
     sample_distribution=distribution_df,
     cell_atlas=atlas_df,
@@ -377,7 +377,7 @@ train_result = rocit.train(
 
 # Prediction
 predictions = rocit.predict(
-    sample_id="SAMPLE01",
+    sample_id="SAMPLE_ID",
     best_checkpoint_path=Path("training/best-checkpoint.ckpt"),
     read_store=[methylation_lazy_df],  # List of polars DataFrames or LazyFrames
     sample_distribution=distribution_df,
