@@ -1,7 +1,7 @@
 sample_id: "HG008"
 best_checkpoint_path: "HG008_training/HG008/version_0/checkpoints/best-checkpoint.ckpt"
 sample_distribution: "HG008_methylation_distribution/HG008_methylation_distribution.parquet"
-cell_atlas: "cell_map_reference_atlas.parquet"
+cell_atlas: "reference/cell_map_reference_atlas.parquet"
 read_store_dir: "HG008_cpg_methylation/"
 output_dir: "HG008_predictions/"
 cache_dir: "HG008_cache/"

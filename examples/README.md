@@ -11,7 +11,8 @@ Download the example data and cell atlas from Zenodo:
 wget https://zenodo.org/records/18859554/files/HG008_example_data.tar
 
 # Download cell atlas
-wget https://zenodo.org/records/18859554/files/cell_map_reference_atlas.parquet
+mkdir -p reference
+wget https://zenodo.org/records/18859554/files/cell_map_reference_atlas.parquet -O reference/cell_map_reference_atlas.parquet
 
 # Extract example data
 tar -xf HG008_example_data.tar

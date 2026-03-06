@@ -7,7 +7,7 @@ haplotags: "HG008_example_data/HG008_haplotags.tsv"
 haploblocks: "HG008_example_data/HG008_haploblocks.tsv"
 snv_clusters: "HG008_example_data/HG008_clusters.tsv"
 snv_cluster_assignments: "HG008_example_data/HG008_snv_cluster_assignments.tsv"
-cell_atlas: "cell_map_reference_atlas.parquet"
+cell_atlas: "reference/cell_map_reference_atlas.parquet"
 chromosomes: ["chr19", "chr21", "chr22"]
 val_chromosomes: ["chr21"]
 test_chromosomes: ["chr22"]

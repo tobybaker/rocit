@@ -50,7 +50,8 @@ pip install -e .
 ROCIT requires a reference cell-type methylation atlas derived from whole-genome bisulfite sequencing data (GSE186458). Download the pre-computed atlas:
 
 ```bash
-wget https://zenodo.org/records/18859554/files/cell_map_reference_atlas.parquet -O reference/cell_atlas.parquet
+mkdir -p reference
+wget https://zenodo.org/records/18859554/files/cell_map_reference_atlas.parquet -O reference/cell_map_reference_atlas.parquet
 ```
 
 Alternatively, you can [generate the atlas from source](#generating-the-cell-atlas-from-source) using the provided scripts.

@@ -1,7 +1,7 @@
 sample_id: "HG008"
 labelled_data: "processed_training_data/labelled_methylation_data.parquet"
 sample_distribution: "HG008_methylation_distribution/HG008_methylation_distribution.parquet"
-cell_atlas: "cell_map_reference_atlas.parquet"
+cell_atlas: "reference/cell_map_reference_atlas.parquet"
 val_chromosomes: ["chr21"]
 test_chromosomes: ["chr22"]
 output_dir: "HG008_training/"
