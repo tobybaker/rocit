@@ -91,7 +91,7 @@ rocit predict --config predict_config.yaml
 
 ## Configuration Files
 
-ROCIT uses YAML configuration files for reproducibility and ease of use. Below are templates for each command.
+ROCIT uses YAML configuration files for reproducibility and ease of use. Below are templates for each command. Tabular input files (variants, copy number, haplotags, etc.) can be provided in any [supported format](#data-format-specifications) — configuration examples use `.parquet` but `.csv`, `.tsv`, `.arrow`, and `.ndjson` are equally valid.
 
 ### Training Configuration (`train_config.yaml`)
 
@@ -446,6 +446,18 @@ The resulting atlas enables ROCIT to contextualize read-level methylation patter
 
 ## Data Format Specifications
 
+ROCIT accepts the following tabular file formats for all non-BAM inputs (copy number, variants, haplotags, haploblocks, SNV clusters, cell atlas, etc.):
+
+| Format | Extensions |
+|--------|-----------|
+| Parquet | `.parquet`, `.pqt` |
+| CSV | `.csv` |
+| TSV | `.tsv` |
+| Arrow IPC / Feather | `.arrow`, `.feather`, `.ipc` |
+| Newline-delimited JSON | `.ndjson` |
+
+All outputs from ROCIT are written as Parquet.
+
 ### Copy Number Segments
 
 Required columns:
@@ -502,6 +514,12 @@ Required columns:
 - `cluster_id`: Cluster identifier (must match IDs in SNV Clusters)
 - `n_copies`: Number of allelic copies of the variant.
 
+
+## Citation
+
+If you use ROCIT in your research, please cite:
+
+Baker TM, Matulionis N, Andrasz C, Gerke D, Garcia-Dutton N, Atkinson D, et al. Genome-wide classification of tumor-derived reads from bulk long-read sequencing. *bioRxiv* [Preprint]. 2026 Mar 5. DOI: [10.64898/2026.03.03.709085](https://doi.org/10.64898/2026.03.03.709085)
 
 ## License
 
