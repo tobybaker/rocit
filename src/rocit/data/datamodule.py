@@ -2,8 +2,6 @@ import os
 import torch
 import lightning as L
 
-
-import torchmetrics
 from torch.utils.data import Dataset, DataLoader
 
 
