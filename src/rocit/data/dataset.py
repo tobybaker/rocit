@@ -166,14 +166,12 @@ class ReadDatasetBuilder:
         self,
         cache_dir: Optional[str] = '/scratch/',
         num_proc: Optional[int] = None,
-        fingerprint: Optional[str] = None,
      ):
-        
+
         hf_dataset =  HFDataset.from_generator(
             self._read_generator,
             cache_dir=cache_dir,
             num_proc=num_proc,
-            fingerprint=fingerprint,
             split='reads'
         )
         return ReadDataset(
