@@ -8,13 +8,13 @@ Download the example data and cell atlas from Zenodo:
 
 ```bash
 # Download example data
-wget <ZENODO_LINK>/HG008_example_data.tar.gz
+wget https://zenodo.org/records/18859554/files/HG008_example_data.tar
 
 # Download cell atlas
-wget <ZENODO_LINK>/cell_map_reference_atlas.parquet
+wget https://zenodo.org/records/18859554/files/cell_map_reference_atlas.parquet
 
 # Extract example data
-tar -xzf HG008_example_data.tar.gz
+tar -xf HG008_example_data.tar
 ```
 
 ## Data

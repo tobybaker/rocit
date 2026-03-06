@@ -21,8 +21,6 @@ env/
 .coverage
 htmlcov/
 
-#temporary for development
-examples/
 
 #SLURM files
 *.out
