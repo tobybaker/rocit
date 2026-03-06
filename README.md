@@ -89,6 +89,10 @@ rocit predict --config predict_config.yaml
 ```
 
 
+## Example Data
+
+The [`examples/`](examples/) directory contains a worked example using the HG008 cancer cell line, including sample config files and instructions for downloading the example dataset from Zenodo. This is the best starting point if you want to see the expected input data formats and run ROCIT end-to-end on real data.
+
 ## Configuration Files
 
 ROCIT uses YAML configuration files for reproducibility and ease of use. Below are templates for each command. Tabular input files (variants, copy number, haplotags, etc.) can be provided in any [supported format](#data-format-specifications) — configuration examples use `.parquet` but `.csv`, `.tsv`, `.arrow`, and `.ndjson` are equally valid.
