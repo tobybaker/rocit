@@ -1,0 +1,17 @@
+sample_id: "HG008"
+bam: "HG008_example_data/HG008.Revio.hifi_reads.subsampled.bam"
+bam_index: "HG008_example_data/HG008.Revio.hifi_reads.subsampled.bam.bai"
+copy_number: "HG008_example_data/HG008_sample_cn.tsv"
+variants: "HG008_example_data/HG008_variants.tsv"
+haplotags: "HG008_example_data/HG008_haplotags.tsv"
+haploblocks: "HG008_example_data/HG008_haploblocks.tsv"
+snv_clusters: "HG008_example_data/HG008_clusters.tsv"
+snv_cluster_assignments: "HG008_example_data/HG008_snv_cluster_assignments.tsv"
+cell_atlas: "~/cell_map_reference_atlas.parquet"
+chromosomes: ["chr19", "chr21", "chr22"]
+val_chromosomes: ["chr21"]
+test_chromosomes: ["chr22"]
+min_mapq: 0
+workers: 8
+output_dir: "HG008_output/"
+cache_dir: "HG008_cache/"
