@@ -1,68 +1,18 @@
 import pyBigWig
 import polars as pl
 import re
-import tarfile
-import urllib.request
 import sys
 import argparse
+import tempfile
+import shutil
 from pathlib import Path
-from functools import reduce
 from tqdm import tqdm
-
-# GEO accession bulk download URL for GSE186458
-GEO_URL = "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE186458&format=file"
-DOWNLOAD_SIZE_GB = 328
 
 CHROMOSOMES = [f"chr{x}" for x in range(1, 23)] + ["chrX"]
 
 
-def download_and_extract(dest_dir: Path) -> Path:
-    """Download the GSE186458 tar archive from GEO and extract bigwig files.
-
-    Parameters
-    ----------
-    dest_dir : Path
-        Directory in which to place the downloaded tar and extracted contents.
-
-    Returns
-    -------
-    Path
-        The directory containing the extracted bigwig files.
-    """
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    tar_path = dest_dir / "GSE186458_RAW.tar"
-
-    if tar_path.exists():
-        print(f"Tar archive already exists at {tar_path}, skipping download.")
-    else:
-        print(f"Downloading {DOWNLOAD_SIZE_GB} GB archive from GEO to {tar_path} ...")
-        # Simple progress hook for urllib
-        def _reporthook(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0:
-                pct = min(downloaded / total_size * 100, 100)
-                print(f"\r  {downloaded / 1e9:.2f} / {total_size / 1e9:.2f} GB ({pct:.1f}%)", end="")
-            else:
-                print(f"\r  {downloaded / 1e9:.2f} GB downloaded", end="")
-
-        urllib.request.urlretrieve(GEO_URL, str(tar_path), reporthook=_reporthook)
-        print()  # newline after progress
-
-    # Extract -----------------------------------------------------------
-    extract_dir = dest_dir / "bigwig_files"
-    if extract_dir.exists() and any(extract_dir.glob("*.bigwig")):
-        print(f"Extracted files already present in {extract_dir}, skipping extraction.")
-    else:
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Extracting {tar_path} into {extract_dir} ...")
-        with tarfile.open(tar_path, "r") as tar:
-            tar.extractall(path=extract_dir)
-        print("Extraction complete.")
-
-    return extract_dir
-
-
 def load_bigwig_paths(data_dir: Path) -> dict[str, list[Path]]:
+    """Discover bigwig files and group them by cell type."""
     bigwig_paths: dict[str, list[Path]] = {}
     for filepath in data_dir.glob("*.hg38.bigwig"):
         match = re.search(r"_(.*?)-(Z0|11)", filepath.name)
@@ -74,63 +24,169 @@ def load_bigwig_paths(data_dir: Path) -> dict[str, list[Path]]:
     return bigwig_paths
 
 
-def load_big_wig_df(bigwig_path: Path, eps: float = 1e-9) -> pl.DataFrame:
+def bigwig_to_parquets(
+    bigwig_path: Path, out_dir: Path, eps: float = 1e-9
+) -> list[Path]:
+    """Convert a single bigwig to one parquet per chromosome.
+
+    Each chromosome's intervals are extracted, filtered, written to disk, and
+    immediately freed.  This avoids ever holding more than one chromosome's
+    worth of data in memory.
+
+    Returns the list of parquet files written.
+    """
     bw = pyBigWig.open(str(bigwig_path))
-    data = []
-    for chromosome in bw.chroms():
-        if chromosome not in CHROMOSOMES:
+    written: list[Path] = []
+
+    for chromosome in CHROMOSOMES:
+        if chromosome not in bw.chroms():
             continue
         intervals = bw.intervals(chromosome)
-        if intervals:
-            for start, end, value in intervals:
-                if value < -eps:
-                    continue
-                data.append((chromosome, start, value))
+        if not intervals:
+            continue
+
+        # Build column arrays directly to avoid an intermediate list of tuples
+        positions = []
+        values = []
+        for start, _end, value in intervals:
+            if value >= -eps:
+                positions.append(start)
+                values.append(value)
+        del intervals
+
+        if not positions:
+            continue
+
+        df = pl.DataFrame(
+            {
+                "chromosome": [chromosome] * len(positions),
+                "position": positions,
+                "average_methylation": values,
+            },
+            schema={
+                "chromosome": pl.Utf8,
+                "position": pl.UInt32,
+                "average_methylation": pl.Float32,
+            },
+        )
+        del positions, values
+
+        out_path = out_dir / f"{bigwig_path.stem}_{chromosome}.parquet"
+        df.write_parquet(out_path)
+        written.append(out_path)
+        del df
+
     bw.close()
-
-    df = pl.DataFrame(
-        data,
-        schema={
-            "chromosome": pl.Enum(CHROMOSOMES),
-            "position": pl.UInt32,
-            "average_methylation": pl.Float32,
-        },
-        orient="row",
-    )
-    return df
+    return written
 
 
-def get_cell_type_df(bigwig_paths: list[Path]) -> pl.DataFrame:
-    all_dfs = [load_big_wig_df(p) for p in bigwig_paths]
-    all_dfs = pl.concat(all_dfs)
-    return all_dfs.group_by(["chromosome", "position"]).agg(
+def aggregate_cell_type(parquet_paths: list[Path], out_path: Path) -> None:
+    """Lazily scan replicate parquets, average methylation, and sink to parquet."""
+    lf = pl.scan_parquet(parquet_paths)
+    lf = lf.group_by(["chromosome", "position"]).agg(
         pl.col("average_methylation").mean()
     )
+    lf.sink_parquet(out_path)
 
 
-def join_frames(df_store: list[pl.LazyFrame]) -> pl.LazyFrame:
-    return reduce(
-        lambda left, right: left.join(
-            right, on=["chromosome", "position"], how="full", coalesce=True
-        ),
-        df_store,
-    )
+def join_per_chromosome_chunked(
+    celltype_parquets: dict[str, Path],
+    output_path: Path,
+    tmp_dir: Path,
+) -> None:
+    """Join cell-type parquets one chromosome at a time, writing per-chrom
+    parquets then concatenating via lazy scan at the end.
+
+    Avoids the repeated read-append-write pattern.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    chrom_dir = tmp_dir / "per_chrom"
+    chrom_dir.mkdir(exist_ok=True)
+    chrom_files: list[Path] = []
+
+    for chrom in tqdm(CHROMOSOMES, desc="Joining chromosomes"):
+        frames: list[pl.DataFrame] = []
+        for cell_type, pq_path in celltype_parquets.items():
+            col_name = f"average_methylation_{cell_type.lower()}"
+            df = (
+                pl.scan_parquet(pq_path)
+                .filter(pl.col("chromosome") == chrom)
+                .rename({"average_methylation": col_name})
+                .drop("chromosome")
+                .collect()
+            )
+            if df.height > 0:
+                frames.append(df)
+
+        if not frames:
+            continue
+
+        joined = frames[0]
+        for right in frames[1:]:
+            joined = joined.join(right, on="position", how="full", coalesce=True)
+        del frames
+
+        joined = joined.with_columns(pl.lit(chrom).alias("chromosome"))
+        joined = joined.sort("position")
+
+        chrom_path = chrom_dir / f"{chrom}.parquet"
+        joined.write_parquet(chrom_path)
+        chrom_files.append(chrom_path)
+        del joined
+
+    # Concatenate all chromosome parquets lazily and sink
+    if chrom_files:
+        pl.scan_parquet(chrom_files).sink_parquet(output_path)
 
 
-def get_combined_cell_type_df(all_bigwig_paths: dict[str, list[Path]]) -> pl.DataFrame:
-    df_store = []
-    for cell_type, cell_type_bigwig_paths in tqdm(
-        all_bigwig_paths.items(), desc="Loading cell types"
-    ):
-        cell_type_df = get_cell_type_df(cell_type_bigwig_paths)
-        cell_type_df = cell_type_df.rename(
-            {"average_methylation": f"average_methylation_{cell_type.lower()}"}
-        )
-        df_store.append(cell_type_df.lazy())
+def build_atlas(
+    all_bigwig_paths: dict[str, list[Path]],
+    output_path: Path,
+) -> None:
+    """Build the combined atlas with minimal memory footprint.
 
-    combined_df = join_frames(df_store).collect()
-    combined_df = combined_df.sort(["chromosome", "position"])
-    return combined_df
+    Pipeline:
+      1. Each bigwig -> per-chromosome parquets (one chrom in memory at a time).
+      2. Per cell type: lazily aggregate replicate parquets -> cell type parquet.
+      3. Per chromosome: read relevant slices from cell type parquets, join, write.
+      4. Lazily concatenate chromosome parquets into final output.
+    """
+    with tempfile.TemporaryDirectory(prefix="methylation_atlas_") as tmp_str:
+        tmp_dir = Path(tmp_str)
+        bigwig_tmp = tmp_dir / "bigwig"
+        celltype_tmp = tmp_dir / "celltype"
+        bigwig_tmp.mkdir()
+        celltype_tmp.mkdir()
+
+        # -- Stage 1: bigwig -> per-chromosome parquets (sequential) --------
+        cell_type_replicate_pqs: dict[str, list[Path]] = {}
+        total_files = sum(len(v) for v in all_bigwig_paths.values())
+
+        with tqdm(total=total_files, desc="Converting bigwig files") as pbar:
+            for cell_type, paths in all_bigwig_paths.items():
+                for bw_path in paths:
+                    pq_dir = bigwig_tmp / bw_path.stem
+                    pq_dir.mkdir()
+                    pq_paths = bigwig_to_parquets(bw_path, pq_dir)
+                    cell_type_replicate_pqs.setdefault(cell_type, []).extend(pq_paths)
+                    pbar.update(1)
+
+        # -- Stage 2: aggregate replicates per cell type (lazy sink) -------
+        celltype_parquets: dict[str, Path] = {}
+        for cell_type, pq_paths in tqdm(
+            cell_type_replicate_pqs.items(), desc="Aggregating cell types"
+        ):
+            out = celltype_tmp / f"{cell_type.lower()}.parquet"
+            aggregate_cell_type(pq_paths, out)
+            celltype_parquets[cell_type] = out
+
+        # Free replicate parquets
+        shutil.rmtree(bigwig_tmp)
+
+        # -- Stage 3 & 4: per-chromosome join -> final parquet -------------
+        join_per_chromosome_chunked(celltype_parquets, output_path, tmp_dir)
+
+    # TemporaryDirectory cleaned up here
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -142,23 +198,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Input: either a local path or a download flag (mutually exclusive)
-    input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument(
+    parser.add_argument(
         "-d", "--data-dir",
         type=Path,
+        required=True,
         help=(
             "Path to a directory containing the extracted *.hg38.bigwig files "
             "(e.g. from the GSE186458 tar archive)."
-        ),
-    )
-    input_group.add_argument(
-        "--download",
-        type=Path,
-        metavar="DOWNLOAD_DIR",
-        help=(
-            f"Download the GSE186458 archive (~{DOWNLOAD_SIZE_GB} GB) from GEO into "
-            "DOWNLOAD_DIR, extract it, and use the extracted bigwig files as input."
         ),
     )
 
@@ -175,39 +221,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
-    # Resolve input directory ------------------------------------------------
-    if args.download is not None:
-        print(
-            f"WARNING: This will download approximately {DOWNLOAD_SIZE_GB} GB of data "
-            f"into {args.download.resolve()}."
-        )
-        confirmation = input("Proceed? [y/N]: ").strip().lower()
-        if confirmation != "y":
-            print("Aborted.")
-            sys.exit(0)
-        data_dir = download_and_extract(args.download)
-    else:
-        data_dir = args.data_dir
-        if not data_dir.is_dir():
-            print(f"Error: {data_dir} is not a valid directory.", file=sys.stderr)
-            sys.exit(1)
+    data_dir = args.data_dir
+    if not data_dir.is_dir():
+        print(f"Error: {data_dir} is not a valid directory.", file=sys.stderr)
+        sys.exit(1)
 
-    # Build atlas ------------------------------------------------------------
     all_bigwig_paths = load_bigwig_paths(data_dir)
     if not all_bigwig_paths:
         print(f"Error: no *.hg38.bigwig files found in {data_dir}.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Found {sum(len(v) for v in all_bigwig_paths.values())} bigwig files "
-          f"across {len(all_bigwig_paths)} cell types.")
+    total_files = sum(len(v) for v in all_bigwig_paths.values())
+    print(
+        f"Found {total_files} bigwig files across {len(all_bigwig_paths)} cell types."
+    )
 
-    combined_df = get_combined_cell_type_df(all_bigwig_paths)
-
-    # Write output -----------------------------------------------------------
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    combined_df.write_parquet(args.output)
-    print(f"Atlas written to {args.output} "
-          f"({combined_df.shape[0]:,} rows x {combined_df.shape[1]} columns).")
+    build_atlas(all_bigwig_paths, args.output)
+    print(f"Atlas written to {args.output}.")
 
 
 if __name__ == "__main__":

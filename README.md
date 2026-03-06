@@ -53,7 +53,7 @@ ROCIT requires a reference cell-type methylation atlas derived from whole-genome
 wget [PLACEHOLDER_URL] -O reference/cell_atlas.parquet
 ```
 
-Alternatively, you can [generate the atlas from source](#generating-the-cell-atlas-from-source).
+Alternatively, you can [generate the atlas from source](#generating-the-cell-atlas-from-source) using the provided scripts.
 
 > **Citation:** Loyfer, N., et al. (2023). [A DNA methylation atlas of normal human cell types](https://doi.org/10.1038/s41586-022-05580-6). *Nature*.
 
@@ -389,47 +389,44 @@ predictions = rocit.predict(
 
 ## Generating the Cell Atlas from Source
 
-If you prefer to build the cell-type methylation atlas yourself rather than using the pre-computed version, you can use the provided generation script. This process downloads and processes whole-genome bisulfite sequencing data from GEO accession **GSE186458**, which contains methylation profiles across diverse normal human cell types.
+If you prefer to build the cell-type methylation atlas yourself rather than using the pre-computed version, two scripts are provided. This process downloads and processes whole-genome bisulfite sequencing data from GEO accession **GSE186458**, which contains methylation profiles across diverse normal human cell types.
 
 ### Requirements
 
 ```bash
-pip install pyBigWig polars tqdm
+pip install pyBigWig polars tqdm requests
 ```
 
 ### Usage
 
-The script provides two modes: automatic download and processing, or processing from pre-downloaded files.
+**Step 1: Download the bigwig files**
 
-**Automatic Download and Processing**
+This will download ~60 GB of raw data from GEO NCBI:
 
-This will download ~328 GB of raw data from GEO:
+```bash
+python setup_scripts/download_bigwig_files.py \
+    --outdir /path/to/download_directory/
+```
+
+**Options:**
+- `--outdir`: Output directory for downloaded files (default: `GSE186458_hg38_bigwigs`)
+- `--max-concurrent`: Number of concurrent downloads (default: 4; do not exceed ~5)
+- `--dry-run`: Print URLs without downloading
+
+**Step 2: Build the atlas from downloaded files**
 
 ```bash
 python setup_scripts/generate_cell_map_df.py \
-    --download /path/to/download_directory/ \
+    --data-dir /path/to/download_directory/ \
     --output reference/cell_atlas.parquet
 ```
 
-You will be prompted to confirm before the download begins.
+### What the Scripts Do
 
-**Process Pre-Downloaded Files**
-
-If you already have the bigwig files:
-
-```bash
-python setup_scripts/generate_cell_map_df.py \
-    --data-dir /path/to/extracted_bigwig_files/ \
-    --output reference/cell_atlas.parquet
-```
-
-### What the Script Does
-
-1. **Downloads** (if using `--download`): Fetches the GSE186458 tar archive from NCBI GEO
-2. **Extracts**: Unpacks `*.hg38.bigwig` files containing methylation data per cell type
-3. **Processes**: For each cell type, aggregates methylation values across biological replicates
-4. **Combines**: Joins all cell types into a single reference atlas
-5. **Outputs**: Saves a Parquet file with columns:
+1. **Download** (`download_bigwig_files.py`): Fetches all `*.hg38.bigwig` files from the GSE186458 GEO series via NCBI FTP, with resume support and retry logic
+2. **Process** (`generate_cell_map_df.py`): For each cell type, aggregates methylation values across biological replicates
+3. **Combine**: Joins all cell types into a single reference atlas
+4. **Output**: Saves a Parquet file with columns:
    - `chromosome`: chr1-chr22, chrX
    - `position`: CpG genomic position
    - `average_methylation_{cell_type}`: Mean methylation value (0-1) for each cell type
