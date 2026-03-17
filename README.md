@@ -13,9 +13,9 @@ ROCIT currently supports training and prediction on PacBio HiFi Tumor BAMs with 
 
 ROCIT uses a multi-step approach:
 
-1. **Data Preprocessing**: Extracts CpG methylation from PacBio BAM files and labels the origin of a subset of reads based on somatic variants (SNVs) and loss of heterozygosity (LOH) events
-2. **Input Features**: Combines read-level methylation patterns with cell-type reference atlases and bulk sample methylation distributions
-3. **Model Training**: Trains a transformer-based neural network to classify the labelled read subset using chromosomal cross-validation
+1. **Data Preprocessing**: Extracts CpG methylation probabilities from PacBio BAM files and labels the origin of a subset of reads based on somatic variants (SNVs) and copy number loss of heterozygosity (LOH) events
+2. **Input Features**: Combines read-level CpG methylation information with cell-type reference methylationatlases and bulk sample methylation distributions
+3. **Model Training**: Trains a transformer-based neural network to classify the labelled subset of reads.
 4. **Prediction**: Applies the trained model to classify all reads in the sample
 
 ## Installation
@@ -47,7 +47,7 @@ pip install -e .
 
 ### Cell Atlas Requirement
 
-ROCIT requires a reference cell-type methylation atlas derived from whole-genome bisulfite sequencing data (GSE186458). Download the pre-computed atlas:
+ROCIT requires a reference cell-type CpG methylation atlas derived from whole-genome bisulfite sequencing data (GSE186458). Download the pre-computed atlas:
 
 ```bash
 mkdir -p reference
@@ -169,7 +169,7 @@ output_dir: "preprocessing/"
 - `output_dir`: Directory for preprocessing outputs
 
 **Optional fields:**
-- `snv_cluster_assignments`: Path to SNV cluster assignments (if not provided, will be inferred)
+- `snv_cluster_assignments`: Path to SNV cluster assignments. If this is not provided, the cluster assignments will be inferred from variant read counts and copy number
 
 ### Full Pipeline Configuration (`run_config.yaml`)
 
