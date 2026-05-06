@@ -92,7 +92,7 @@ rocit predict --config predict_config.yaml
 
 ## Example Data
 
-The [`examples/`](examples/) directory contains a worked example using the HG008 cancer cell line, including sample config files and instructions for downloading the example dataset from Zenodo. This is the best starting point if you want to see the expected input data formats and run ROCIT end-to-end on real data.
+The [`examples/`](examples/) directory contains a worked example using the HG008 cancer cell line, including sample config files and instructions for downloading the example dataset from [Zenodo](https://zenodo.org/records/18859554). This is the best starting point if you want to see the expected input data formats and run ROCIT end-to-end on real data.
 
 ## Configuration Files
 

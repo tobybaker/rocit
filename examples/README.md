@@ -4,7 +4,7 @@ A working example using the reads sampled from the HG008 cancer cell line. This 
 
 ## Download
 
-Download the HG008 example data and cell atlas reference data from Zenodo:
+Download the HG008 example data and cell atlas reference data from [Zenodo](https://zenodo.org/records/18859554):
 
 ```bash
 # Download example data
