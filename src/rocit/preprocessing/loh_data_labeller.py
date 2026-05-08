@@ -46,7 +46,7 @@ def get_loh_table(somatic_data,max_major_cn:int=4,min_segment_length=1e6):
 def get_haploblocks(somatic_data,min_block_size=5e5):
     haploblocks = somatic_data.sample_haploblocks
     haploblocks = haploblocks.filter(pl.col('block_size')>=min_block_size)
-    haploblocks = haploblocks.drop(['n_variants'])
+    haploblocks = haploblocks.drop(['n_variants'],strict=False)
     return haploblocks
 
 def get_subblocks(haploblocks,subblock_size=int(1e5)):
