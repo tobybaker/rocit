@@ -1,5 +1,8 @@
-import pysam
+import array
+
+import numpy as np
 import polars as pl
+import pysam
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
@@ -10,6 +13,12 @@ from rocit.constants import HUMAN_CHROMOSOMES
 # reverse strand to C at position 1 (the G on the reference becomes C on the read)
 FORWARD_CPG_MODIFICATION_INDEX = ('C', 0, 'm')
 REVERSE_CPG_MODIFICATION_INDEX = ('C', 1, 'm')
+
+# Genomic coordinates are non-negative, so -1 is a safe sentinel for missing
+# reference positions (soft-clipped/inserted bases). Replaced with NULL on write.
+_NULL_POSITION = -1
+_STRAND_FORWARD = 0
+_STRAND_REVERSE = 1
 
 def get_cpg_modification_index(strand: str) -> tuple[str, int, str]:
     """Return the pysam modified_bases key for the given strand."""
@@ -132,16 +141,18 @@ def process_chromosome(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{sample_id}_{chromosome}_cpg_methylation.parquet"
-    
-    # Accumulate data in lists for efficient Polars DataFrame construction
-    read_counts: list[int] = []
+
+    # array.array packs raw machine ints, dropping the ~28-byte per-element
+    # overhead Python list[int] carries. Dtype codes match the final cast.
+    read_counts = array.array('I')           # uint32
+    supplementary_flags = array.array('B')   # uint8 → bool
+    positions = array.array('i')             # int32 with -1 sentinel for None
+    read_positions = array.array('i')        # int32
+    methylation_probs = array.array('B')     # uint8 (0-255)
+    strand_ids = array.array('B')            # uint8 (0=+, 1=-)
+    # str refs are already cheap (8B/row, all pointing to the same interned
+    # query_name per read); polars dedupes on the Categorical cast below.
     read_indexes: list[str] = []
-    supplementary_alignment: list[bool] = []
-    chromosomes: list[str] = []
-    positions: list[int | None] = []
-    read_positions: list[int] = []
-    methylation_probs: list[int] = []
-    strands: list[str] = []
 
     index_filename = str(index_path) if index_path else None
     alignment_counter = 0
@@ -153,45 +164,62 @@ def process_chromosome(
             if read.mapping_quality < min_mapq:
                 continue
 
-            strand = "-" if read.is_reverse else "+"
+            is_reverse = read.is_reverse
+            strand = "-" if is_reverse else "+"
             read_pos, ref_pos, probs = extract_cpg_methylation(read, strand)
 
             n_sites = len(probs)
             if n_sites == 0:
                 continue
 
+            strand_id = _STRAND_REVERSE if is_reverse else _STRAND_FORWARD
+            supp_flag = 1 if read.is_supplementary else 0
+
             read_counts.extend([alignment_counter] * n_sites)
-            read_indexes.extend([read.query_name] * n_sites)
-            supplementary_alignment.extend([read.is_supplementary] * n_sites)
-            chromosomes.extend([chromosome] * n_sites)
-            positions.extend(ref_pos)
+            supplementary_flags.extend([supp_flag] * n_sites)
+            strand_ids.extend([strand_id] * n_sites)
             read_positions.extend(read_pos)
             methylation_probs.extend(probs)
-            strands.extend([strand] * n_sites)
+            positions.extend(_NULL_POSITION if p is None else p for p in ref_pos)
+            read_indexes.extend([read.query_name] * n_sites)
 
             alignment_counter += 1
 
-    df = pl.DataFrame({
-        "read_count": read_counts,
-        "read_index": read_indexes,
-        "supplementary_alignment": supplementary_alignment,
-        "chromosome": chromosomes,
-        "position": positions,
-        "read_position": read_positions,
-        "methylation": methylation_probs,
-        "strand": strands,
-    }).with_columns([
-        pl.col("read_count").cast(pl.UInt32),
-        pl.col("chromosome").cast(pl.Categorical),
-        pl.col("read_index").cast(pl.Categorical),
-        pl.col("strand").cast(pl.Categorical),
-        pl.col("position").cast(pl.Int32),
-        pl.col("read_position").cast(pl.Int32),
-        pl.col("methylation").cast(pl.UInt8),
-    ])
-
-    if df.is_empty():
+    if len(methylation_probs) == 0:
         return None
+
+    # np.frombuffer wraps each array.array zero-copy; the buffers stay alive in
+    # this scope while polars copies them into its arrow-backed columns.
+    df = pl.DataFrame({
+        "read_count": np.frombuffer(read_counts, dtype=np.uint32),
+        "read_index": read_indexes,
+        "supplementary_alignment": np.frombuffer(supplementary_flags, dtype=np.uint8).astype(bool),
+        "position": np.frombuffer(positions, dtype=np.int32),
+        "read_position": np.frombuffer(read_positions, dtype=np.int32),
+        "methylation": np.frombuffer(methylation_probs, dtype=np.uint8),
+        "_strand_id": np.frombuffer(strand_ids, dtype=np.uint8),
+    }).with_columns([
+        pl.lit(chromosome).cast(pl.Categorical).alias("chromosome"),
+        pl.col("read_index").cast(pl.Categorical),
+        pl.when(pl.col("_strand_id") == _STRAND_FORWARD)
+            .then(pl.lit("+"))
+            .otherwise(pl.lit("-"))
+            .cast(pl.Categorical)
+            .alias("strand"),
+        pl.when(pl.col("position") == _NULL_POSITION)
+            .then(None)
+            .otherwise(pl.col("position"))
+            .alias("position"),
+    ]).select([
+        "read_count",
+        "read_index",
+        "supplementary_alignment",
+        "chromosome",
+        "position",
+        "read_position",
+        "methylation",
+        "strand",
+    ])
 
     df.write_parquet(output_path)
 
