@@ -16,17 +16,27 @@ class SparseEmbeddingBlock(nn.Module):
     
     def set_context(self, embedding_source):
         """Call once per dataset before any forward passes."""
-        embedding = embedding_source.get_embedding_vector().to(self.impute_values.device)
+        src = embedding_source.get_embedding_vector()
+
+        device = self.impute_values.device
+
+        if src.device == device:
+            embedding = src.clone()      # already resident: copy so we don't mutate the store
+        else:
+            embedding = src.to(device)   # cross-device .to() already returns a private copy
         
         if embedding.shape[1] != self.dim:
             raise ValueError(f'Embedding block expected to have dimension {self.dim} but received {embedding.shape[1]}')
-
-        nan_mask = torch.isnan(embedding)
-        embedding_clean = embedding.clone()
-        embedding_clean[nan_mask] = 0.0
         
-        self._embedding = embedding_clean
-        self._nan_mask = nan_mask if nan_mask.any() else None
+        nan_mask = torch.isnan(embedding)
+        
+        if nan_mask.any():
+            embedding[nan_mask] = 0.0          # in-place on the copy we own
+            self._embedding = embedding
+            self._nan_mask = nan_mask
+        else:
+            self._embedding = embedding
+            self._nan_mask = None
 
     
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
@@ -108,15 +118,15 @@ class ROCITClassifier(nn.Module):
         position_methylation_sample= self.sample_distribution_embedding(sample_distribution_index)
         
         if self.training:
-            cell_type_methylation_sample += torch.randn_like(cell_type_methylation_sample)*self.noise_level
-            position_methylation_sample += torch.randn_like(position_methylation_sample)*self.noise_level
-            methylation += torch.randn_like(methylation)*self.noise_level
+            cell_type_methylation_sample.add_(torch.randn_like(cell_type_methylation_sample), alpha=self.noise_level)
+            position_methylation_sample.add_(torch.randn_like(position_methylation_sample), alpha=self.noise_level)
+            methylation = methylation + torch.randn_like(methylation)*self.noise_level
             
         input_vector = self.cell_type_embedder(cell_type_methylation_sample) + self.methylation_embedder(torch.cat([position_methylation_sample,methylation.unsqueeze(-1),read_position.unsqueeze(-1)],dim=-1))
 
-        pos_emb = self.pos_emb(torch.arange(input_vector.shape[1], device=input_vector.device))[None, :, :].expand_as(input_vector)
-        
-        input_vector = input_vector + pos_emb*self.SCALE_CONSTANT
+        pos_emb = self.pos_emb(torch.arange(input_vector.shape[1], device=input_vector.device))
+
+        input_vector = input_vector + pos_emb[None, :, :]*self.SCALE_CONSTANT
      
         class_emb = self.class_vector.view(1,1,-1).expand(input_vector.shape[0],-1,-1)
 
