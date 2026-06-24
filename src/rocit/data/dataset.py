@@ -48,13 +48,23 @@ class EmbeddingStore:
 
     def _load_embedding_df(self,embedding_df):
         embedding_df = embedding_df.drop([c for c in embedding_df.columns if c.startswith("__index_level_")])
-        
+
         self._validate_embedding_df(embedding_df)
-        embedding_df = embedding_df.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
-        embedding_df = embedding_df.sort(self.key_cols)
+
+        # Feature columns to Float32: the model downcasts to float32 anyway, and this
+        # halves the resident atlas plus the dense array built in get_embedding_vector.
+        data_cols = [c for c in embedding_df.columns if c not in self.key_cols]
         embedding_df = embedding_df.with_columns(
-            pl.arange(1, len(embedding_df) + 1, dtype=pl.Int32).alias(self.index_col)
+            pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM),
+            pl.col(data_cols).cast(pl.Float32),
         )
+
+        # Index == physical row position (1-based) so it indexes the embedding tensor
+        # directly. Assigned by input order to avoid an eager full-width sort copy of the
+        # (potentially multi-GB, genome-wide) atlas. index_df and the tensor are derived
+        # from this same frame, so they stay consistent regardless of row order.
+        embedding_df = embedding_df.with_row_index(name=self.index_col, offset=1)
+        embedding_df = embedding_df.with_columns(pl.col(self.index_col).cast(pl.Int32))
         return embedding_df
     def _create_index_df(self):
         return self.embedding_df.select(self.key_cols+[self.index_col])
