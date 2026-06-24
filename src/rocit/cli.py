@@ -142,7 +142,7 @@ def train(config_path: Path):
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    labelled_data = read_dataframe(labelled_data_path)
+    labelled_data = read_dataframe(labelled_data_path, scan=True)
     sample_distribution = read_dataframe(sample_distribution_path)
     cell_atlas = read_dataframe(cell_atlas_path)
 

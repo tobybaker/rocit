@@ -55,7 +55,7 @@ class ROCITTrainResult():
 def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes,cache_dir):
     
     # Filter the list
-    all_chromosomes = read_data['chromosome'].unique()
+    all_chromosomes = read_data.select('chromosome').unique().collect().to_series().to_list()
     non_train_chromosomes = val_chromosomes+test_chromosomes
     train_chromosomes = [chrom for chrom in all_chromosomes if chrom not in non_train_chromosomes]
     

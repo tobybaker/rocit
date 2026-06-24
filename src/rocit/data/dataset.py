@@ -148,6 +148,16 @@ class ReadDatasetBuilder:
 
 
     def _process_read_df(self,read_df:pl.DataFrame):
+        # Project to only the columns used downstream before collecting, so a lazy/scanned
+        # source reads just these columns from disk (projection pushdown) instead of the
+        # full-width methylation table. Derived from label_cols so it is correct for both
+        # train (tumor_read included) and inference (excluded); chromosome/position are the
+        # embedding join keys.
+        needed_cols = list(dict.fromkeys(
+            self.label_cols + self.key_cols
+            + ['chromosome', 'position', 'read_position', 'methylation']
+        ))
+        read_df = read_df.select(needed_cols)
         read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
         self._validate_read_df(read_df)
         read_df = read_df.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
