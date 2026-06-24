@@ -1,8 +1,7 @@
 import polars as pl
 import numpy as np
-from pathlib import Path
 from rocit.preprocessing import bam_tools
-import time
+
 def join_with_max_overlap(left_df,right_df,left_start_col:str,left_end_col:str,right_start_col:str,right_end_col:str,suffix:str='_right'):
     right_start_col_r = f"{right_start_col}{suffix}"
     right_end_col_r = f"{right_end_col}{suffix}"
