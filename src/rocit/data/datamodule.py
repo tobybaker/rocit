@@ -42,7 +42,7 @@ class ROCITDataModule(L.LightningDataModule):
     def setup(self, stage=None):
         
         labels = torch.tensor(
-            [self.train_dataset[i]["tumor_read"] for i in range(len(self.train_dataset))]
+            self.train_dataset.hf_dataset["tumor_read"]
         ).float()
 
         pos = labels.sum()

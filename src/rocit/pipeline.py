@@ -67,9 +67,9 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     label_cols = ['read_index','chromosome','tumor_read']
     key_cols = ['read_index']
     
-    train_read_data = read_data.filter(pl.col("chromosome").is_in(train_chromosomes))
-    test_read_data = read_data.filter(pl.col("chromosome").is_in(test_chromosomes))
-    val_read_data = read_data.filter(pl.col("chromosome").is_in(val_chromosomes))
+    train_read_data = read_data.lazy().filter(pl.col("chromosome").is_in(train_chromosomes))
+    test_read_data = read_data.lazy().filter(pl.col("chromosome").is_in(test_chromosomes))
+    val_read_data = read_data.lazy().filter(pl.col("chromosome").is_in(val_chromosomes))
 
     train_dataset_builder = ReadDatasetBuilder(train_read_data,label_cols,key_cols,embedding_sources)
     test_dataset_builder = ReadDatasetBuilder(test_read_data,label_cols,key_cols,embedding_sources)

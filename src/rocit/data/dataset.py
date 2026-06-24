@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import polars as pl
 
 import torch.nn.functional as F
@@ -114,30 +115,28 @@ class ReadDatasetBuilder:
         if read_df.select(test_cols).is_duplicated().any():
             raise ValueError(f'Read data should be unique up to {"-".join(test_cols)}')
         
-    def _get_processed_read_index_data(self, read_index_df: pl.DataFrame) -> dict:
+    def _get_processed_read_index_data(self, read_index_data: dict) -> dict:
         processed = {}
-        read_index_df = read_index_df.sort('read_position')
-        
-        
-        # Access first element of a column
+
+        # Label cols: the group key (read_index) is a scalar; others are lists.
         for label_col in self.label_cols:
-            processed[label_col.lower()] = read_index_df.get_column(label_col)[0]
-        
-        
-        processed['n_cpgs'] = read_index_df.height
-        processed['methylation'] = read_index_df.get_column('methylation').cast(pl.UInt8).to_numpy()
-        
-        # Direct cast and numpy conversion - missing reference positions are mapped to -1
-        processed['position'] =  read_index_df.get_column('position').fill_null(-1).cast(pl.Int32).to_numpy()
-       
-        processed['read_position'] = read_index_df.get_column('read_position').cast(pl.Int32).to_numpy()
+            value = read_index_data[label_col]
+            processed[label_col.lower()] = value[0] if isinstance(value, list) else value
+
+        processed['n_cpgs'] = len(read_index_data['methylation'])
+        processed['methylation'] = np.asarray(read_index_data['methylation'], dtype=np.uint8)
+        # Missing reference positions already filled with -1 in _process_read_df.
+        processed['position'] = np.asarray(read_index_data['position'], dtype=np.int32)
+        processed['read_position'] = np.asarray(read_index_data['read_position'], dtype=np.int32)
 
         for embedding_index_col in self.embedding_index_cols:
-            processed[embedding_index_col.lower()] = read_index_df.get_column(embedding_index_col).cast(pl.UInt32).to_numpy()  
-            
+            processed[embedding_index_col.lower()] = np.asarray(
+                read_index_data[embedding_index_col], dtype=np.uint32
+            )
+
         return processed
-    
-        
+
+
     def _process_read_df(self,read_df:pl.DataFrame):
         read_df = read_df.collect() if isinstance(read_df, pl.LazyFrame) else read_df
         self._validate_read_df(read_df)
@@ -145,14 +144,25 @@ class ReadDatasetBuilder:
 
         drop_cols = ['supplementary_alignment','read_count','strand']
         read_df = read_df.drop(drop_cols,strict=False)
-        
+
         for embedding_source in self.embedding_sources.values():
             read_df = embedding_source.merge_with_read_df(read_df)
 
-        read_groups = read_df.partition_by(self.key_cols, maintain_order=False)
-    
-        for i, read_index_df in enumerate(read_groups):
-            yield self._get_processed_read_index_data(read_index_df)
+        value_cols = ['methylation', 'position', 'read_position'] + self.embedding_index_cols
+        non_key_labels = [c for c in self.label_cols if c not in self.key_cols]
+
+        grouped = (
+            read_df
+            .select(self.key_cols + non_key_labels + value_cols)   # drop unused columns
+            .with_columns(pl.col('position').fill_null(-1))
+            .sort('read_position')                                 # one global sort, preserves group order
+            .group_by(self.key_cols, maintain_order=False)
+            .agg(pl.all())                                          # one frame of list-columns, not N frames
+        )
+        del read_df  # release the joined full-width copy before streaming
+
+        for read_index_data in grouped.iter_rows(named=True):
+            yield self._get_processed_read_index_data(read_index_data)
   
 
     def _read_generator(self):
