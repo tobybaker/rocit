@@ -2,7 +2,7 @@ import polars as pl
 import numpy as np
 from pathlib import Path
 
-from rocit.preprocessing import variant_processing,bam_tools
+from rocit.preprocessing import variant_processing,bam_tools,read_labels
 from scipy.stats import binom,binomtest
 
 def run_general_variant_qc(variant_table: pl.DataFrame, min_variant_reads: int = 3) -> bool:
@@ -96,4 +96,4 @@ def get_tumor_labelled_reads(somatic_data,min_block_size=5e5):
             
             read_store.append(non_tumor_reads)
         
-    return pl.concat(read_store)
+    return read_labels.concat_labelled_reads(read_store)

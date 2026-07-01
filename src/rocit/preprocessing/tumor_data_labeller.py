@@ -1,7 +1,7 @@
 import pickle
 import polars as pl
 import numpy as np
-from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_somatic_data
+from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_somatic_data,read_labels
 from pathlib import Path
 from dataclasses import dataclass
 from rocit.constants import HUMAN_CHROMOSOME_ENUM
@@ -38,9 +38,9 @@ def make_read_labels(somatic_data):
     
     loh_labelled_reads = loh_data_labeller.get_tumor_labelled_reads(somatic_data)
     
-    read_labels = pl.concat([snv_labelled_reads,loh_labelled_reads])
-    read_labels = read_labels.unique(subset=['read_index'], keep='none', maintain_order=False)
-    return read_labels
+    read_labels_df = read_labels.concat_labelled_reads([snv_labelled_reads,loh_labelled_reads])
+    read_labels_df = read_labels_df.unique(subset=['read_index'], keep='none', maintain_order=False)
+    return read_labels_df
 
 
 def load_methylation_df(in_path):

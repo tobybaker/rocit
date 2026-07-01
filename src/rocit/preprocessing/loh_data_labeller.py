@@ -1,6 +1,6 @@
 import polars as pl
 import numpy as np
-from rocit.preprocessing import bam_tools
+from rocit.preprocessing import bam_tools, read_labels
 
 def join_with_max_overlap(left_df,right_df,left_start_col:str,left_end_col:str,right_start_col:str,right_end_col:str,suffix:str='_right'):
     right_start_col_r = f"{right_start_col}{suffix}"
@@ -143,5 +143,5 @@ def get_tumor_labelled_reads(somatic_data):
         labelled_reads = read_table.select(['chromosome','read_index'])
         labelled_reads = labelled_reads.with_columns(tumor_read=pl.lit(False))
         read_store.append(labelled_reads)
-    return pl.concat(read_store)
+    return read_labels.concat_labelled_reads(read_store)
         
