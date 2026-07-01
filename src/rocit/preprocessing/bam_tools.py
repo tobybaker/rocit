@@ -32,6 +32,13 @@ def get_reads_from_cn_row(region_row,bam_filepath):
             
             read_data.append(read_entry)
             
+    if len(read_data) ==0:
+        return pl.DataFrame(schema={
+            'read_index': pl.String,
+            'chromosome': HUMAN_CHROMOSOME_ENUM,
+            'read_start': pl.Int32,
+            'read_end': pl.Int32,
+        })
     read_data = pl.DataFrame(read_data)
     read_data =read_data.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM),pl.col('read_start').cast(pl.Int32),pl.col('read_end').cast(pl.Int32))
 
@@ -86,8 +93,11 @@ def get_variant_reads(vcf_row,bam_filepath):
                 read_data.update(vcf_row)
                 read_store.append(read_data)
     if len(read_store) ==0:
-        return None
-    else:
-        read_store= pl.DataFrame(read_store,infer_schema_length=None)
-        read_store =read_store.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
+        return pl.DataFrame(schema={
+            'read_index': pl.String,
+            'contains_snv': pl.Boolean,
+            'chromosome': HUMAN_CHROMOSOME_ENUM,
+        })
+    read_store= pl.DataFrame(read_store,infer_schema_length=None)
+    read_store =read_store.with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM))
     return read_store.drop_nulls()

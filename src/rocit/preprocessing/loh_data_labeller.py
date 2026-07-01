@@ -117,6 +117,8 @@ def get_tumor_labelled_reads(somatic_data):
         
         
         cn_haploblocks = sample_haploblocks.filter(pl.col('chromosome')==cn_row['chromosome'])
+        if cn_haploblocks.height == 0:
+            continue
         cn_subblocks = get_subblocks(cn_haploblocks)
         
        

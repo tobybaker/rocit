@@ -52,13 +52,15 @@ def load_methylation_df(in_path):
 
 def get_subsampled_methylation_data(sample_methylation_dir,subsample_rate=0.05,seed=123456):
     subsampled_store =[]
-    for in_path in sample_methylation_dir.glob('*cpg_methylation.parquet'):
+    for in_path in sample_methylation_dir.glob('*_cpg_methylation.parquet'):
         in_df = load_methylation_df(in_path)
         read_indices = in_df.select(['chromosome','read_index']).unique().collect()
         sampled_read_indices = read_indices.sample(fraction=subsample_rate,seed=seed)
         in_df = in_df.join(sampled_read_indices.lazy(),how='semi',on=['chromosome','read_index'])
         in_df = in_df.with_columns(pl.lit(False).alias('tumor_read'))
         subsampled_store.append(in_df)
+    if not subsampled_store:
+        raise FileNotFoundError(f"No methylation parquet files found in {sample_methylation_dir}")
     return pl.concat(subsampled_store)
     
 def get_labelled_methylation_data(sample_methylation_dir,read_labels):
@@ -69,6 +71,8 @@ def get_labelled_methylation_data(sample_methylation_dir,read_labels):
        
         in_df = in_df.join(read_labels,on=['chromosome','read_index'],how='inner')
         labelled_data_store.append(in_df)
+    if not labelled_data_store:
+        raise FileNotFoundError(f"No methylation parquet files found in {sample_methylation_dir}")
     labelled_data = pl.concat(labelled_data_store)
     
     return labelled_data

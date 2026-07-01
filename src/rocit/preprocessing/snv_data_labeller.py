@@ -67,7 +67,6 @@ def get_tumor_labelled_reads(somatic_data,min_block_size=5e5):
     labelled_variants = labelled_variants.filter(pl.col('cluster_label')!='fail')
 
     valid_haploblocks = somatic_data.sample_haploblocks.filter(pl.col('block_size')>=min_block_size)
-    count = 0
 
     read_store = []
     for snv_row in labelled_variants.iter_rows(named=True):
