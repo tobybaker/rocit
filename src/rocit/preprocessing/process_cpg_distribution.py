@@ -1,7 +1,9 @@
 import polars as pl
 from pathlib import Path
+from rocit.preprocessing.qc import QCThresholds
 METHYLATION_SCALE = 256.0
-def get_aggregate_methylation_distribution(methylation_df:pl.DataFrame,min_n_cpgs:int=10):
+def get_aggregate_methylation_distribution(methylation_df:pl.DataFrame,qc:QCThresholds=QCThresholds()):
+    min_n_cpgs = qc.min_n_cpgs
     methylation_df = methylation_df.drop_nulls("position")
 
     methylation_dtype = methylation_df.collect_schema()['methylation']
@@ -25,13 +27,13 @@ def get_aggregate_methylation_distribution(methylation_df:pl.DataFrame,min_n_cpg
 
     return aggregate_methylation_df
 
-def get_aggregate_methylation_distribution_from_dir(methylation_dir:Path,output_dir:Path,sample_id:str):
+def get_aggregate_methylation_distribution_from_dir(methylation_dir:Path,output_dir:Path,sample_id:str,qc:QCThresholds=QCThresholds()):
     df_store = []
     for filepath in methylation_dir.glob('*_cpg_methylation.parquet'):
         in_df = pl.scan_parquet(filepath)
         df_store.append(in_df)
     df_store = pl.concat(df_store)
-    aggregate_distribution = get_aggregate_methylation_distribution(df_store)
+    aggregate_distribution = get_aggregate_methylation_distribution(df_store,qc)
     output_path = output_dir/f'{sample_id}_methylation_distribution.parquet'
     aggregate_distribution.sink_parquet(output_path)
 

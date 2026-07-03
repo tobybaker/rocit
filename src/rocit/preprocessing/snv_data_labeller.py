@@ -61,12 +61,13 @@ def run_all_copies_qc(variant_table,min_p_value:float=0.1):
         return False
 
     return True
-def get_tumor_labelled_reads(somatic_data,min_block_size=5e5):
+def get_tumor_labelled_reads(somatic_data):
+    qc = somatic_data.qc
 
     labelled_variants = variant_processing.load_labelled_variants(somatic_data)
     labelled_variants = labelled_variants.filter(pl.col('cluster_label')!='fail')
 
-    valid_haploblocks = somatic_data.sample_haploblocks.filter(pl.col('block_size')>=min_block_size)
+    valid_haploblocks = somatic_data.sample_haploblocks.filter(pl.col('block_size')>=qc.min_haploblock_size)
 
     read_store = []
     for snv_row in labelled_variants.iter_rows(named=True):
@@ -76,16 +77,16 @@ def get_tumor_labelled_reads(somatic_data,min_block_size=5e5):
         snv_labelled_reads = snv_labelled_reads.join(somatic_data.sample_haplotags,on=['chromosome','read_index'],how='inner')
         snv_labelled_reads = snv_labelled_reads.filter(pl.col('block_id').is_in(valid_haploblocks['block_id']))
         
-        if not run_general_variant_qc(snv_labelled_reads):
+        if not run_general_variant_qc(snv_labelled_reads, qc.min_variant_reads):
             continue
-        if not run_phasing_qc(snv_labelled_reads):
+        if not run_phasing_qc(snv_labelled_reads, qc.phasing_min_p_value):
             continue
         #if variant is generally passes qc, add to tumor read store
         snv_containing_reads = snv_labelled_reads.filter(pl.col('contains_snv'))
         tumor_reads = snv_containing_reads.select(['chromosome','read_index']).with_columns(pl.lit(True).alias('tumor_read'))
         
         read_store.append(tumor_reads)
-        all_copies_qc = run_all_copies_qc(snv_labelled_reads)
+        all_copies_qc = run_all_copies_qc(snv_labelled_reads, qc.all_copies_min_p_value)
         #if clonal and on all copies, get reads with same haplotag
         if all_copies_qc:
             variant_haplotype = snv_containing_reads['haplotag'][0]

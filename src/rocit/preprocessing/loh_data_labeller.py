@@ -104,32 +104,33 @@ def get_min_haplotags(read_table,block_cols):
 
 
 def get_tumor_labelled_reads(somatic_data):
-    loh_table = get_loh_table(somatic_data)
-    sample_haploblocks = get_haploblocks(somatic_data)
-    
+    qc = somatic_data.qc
+    loh_table = get_loh_table(somatic_data,qc.loh_max_major_cn,qc.loh_min_segment_length)
+    sample_haploblocks = get_haploblocks(somatic_data,qc.min_haploblock_size)
+
     read_store = []
     for cn_row in loh_table.iter_rows(named=True):
 
         minor_cn_share = get_minor_cn_share(cn_row)
         read_table = bam_tools.get_reads_from_cn_row(cn_row,somatic_data.sample_bam_path)
-        
+
         read_table = read_table.join(somatic_data.sample_haplotags.drop('block_id'),how='inner',on=['chromosome','read_index'])
-        
-        
+
+
         cn_haploblocks = sample_haploblocks.filter(pl.col('chromosome')==cn_row['chromosome'])
         if cn_haploblocks.height == 0:
             continue
-        cn_subblocks = get_subblocks(cn_haploblocks)
-        
-       
+        cn_subblocks = get_subblocks(cn_haploblocks,qc.loh_subblock_size)
+
+
         read_table = join_with_max_overlap(read_table,cn_haploblocks,'read_start','read_end','block_start','block_end')
         read_table = join_with_max_overlap(read_table,cn_subblocks,'read_start','read_end','subblock_start','subblock_end')
-        
+
         subblock_cols = ['subblock_id','subblock_start','subblock_end']
-        pass_subblocks = get_pass_blocks(read_table,subblock_cols,minor_cn_share)
+        pass_subblocks = get_pass_blocks(read_table,subblock_cols,minor_cn_share,qc.loh_min_coverage,qc.loh_max_freq_diff)
 
         block_cols = ['block_id','block_start','block_end']
-        pass_blocks = get_pass_blocks(read_table,block_cols,minor_cn_share)
+        pass_blocks = get_pass_blocks(read_table,block_cols,minor_cn_share,qc.loh_min_coverage,qc.loh_max_freq_diff)
 
         read_table = read_table.join(pass_subblocks,how='inner',on=subblock_cols)
         read_table = read_table.join(pass_blocks,how='inner',on=block_cols)

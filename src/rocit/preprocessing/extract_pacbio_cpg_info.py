@@ -8,6 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 from rocit.constants import HUMAN_CHROMOSOMES
+from rocit.preprocessing.qc import QCThresholds
 
 # PacBio encodes 5mC at CpG contexts; forward strand maps to C at position 0,
 # reverse strand to C at position 1 (the G on the reference becomes C on the read)
@@ -232,24 +233,25 @@ def process_bam(
     sample_id:str,
     chromosomes: Optional[list[str]] = None,
     index_path: Optional[str | Path] = None,
-    min_mapq: int = 0,
+    qc: QCThresholds = QCThresholds(),
     n_workers: int = 1
 ) -> list[Path]:
     """
     Process all specified chromosomes from a BAM file.
-    
+
     Args:
         bam_path: Path to the BAM file.
         output_dir: Directory for output parquet files.
         sample_id: Sample ID used for file naming
         chromosomes: List of chromosomes to process. Defaults to HG38_STANDARD_CHROMOSOMES.
         index_path: Optional path to BAM index file.
-        min_mapq: Minimum mapping quality threshold.
+        qc: QC thresholds; ``qc.min_mapq`` sets the minimum mapping quality.
         n_workers: Number of parallel workers. Use 1 for sequential processing.
-    
+
     Returns:
         List of paths to output parquet files.
     """
+    min_mapq = qc.min_mapq
     if chromosomes is None:
         chromosomes = HUMAN_CHROMOSOMES
     bam_path = Path(bam_path)

@@ -2,7 +2,7 @@ import click
 import polars as pl
 from pathlib import Path
 from rocit.preprocessing.extract_pacbio_cpg_info import process_bam
-from rocit.preprocessing import tumor_data_labeller,get_aggregate_methylation_distribution_from_dir
+from rocit.preprocessing import tumor_data_labeller,get_aggregate_methylation_distribution_from_dir,QCThresholds
 from rocit.pipeline import training_wrapper,predict_wrapper
 from rocit.config import (
     TrainConfig, PredictConfig, PreprocessConfig, RunConfig,
@@ -325,7 +325,7 @@ def extract_bam_methylation(
         sample_id=sample_id,
         chromosomes=chroms_arg,
         index_path=index,
-        min_mapq=min_mapq,
+        qc=QCThresholds(min_mapq=min_mapq),
         n_workers=workers
     )
 
@@ -399,7 +399,7 @@ def run(config_path: Path):
         sample_id=cfg.sample_id,
         chromosomes=cfg.chromosomes,
         index_path=bam_index_path,
-        min_mapq=cfg.min_mapq,
+        qc=QCThresholds(min_mapq=cfg.min_mapq),
         n_workers=cfg.workers,
     )
 

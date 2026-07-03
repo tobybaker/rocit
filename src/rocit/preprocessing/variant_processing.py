@@ -16,7 +16,7 @@ def _validate_cluster_labels(cluster_labels:pl.DataFrame,max_fail_fraction:float
     fail_clusters = cluster_labels.filter(pl.col('cluster_label')=='fail')
     if fail_clusters['cluster_fraction'].sum()>=max_fail_fraction:
         raise ClusterValidationError(f"{fail_clusters['cluster_fraction'].sum():.1%} of SNVs are in fail cluster. This is more than the permitted {max_fail_fraction:.1%}.")
-def label_snv_clusters(snv_clusters:pl.DataFrame,min_clonal_cluster:float=0.9,max_clonal_cluster:float=1.1,min_clonal_fraction:float=0.3)-> pl.DataFrame:
+def label_snv_clusters(snv_clusters:pl.DataFrame,min_clonal_cluster:float=0.9,max_clonal_cluster:float=1.1,min_clonal_fraction:float=0.3,max_fail_fraction:float=0.2)-> pl.DataFrame:
     cluster_label_enum = pl.Enum(['pass_clonal','pass','fail'])
     # Define clonal cluster criteria
     is_clonal = (
@@ -34,7 +34,7 @@ def label_snv_clusters(snv_clusters:pl.DataFrame,min_clonal_cluster:float=0.9,ma
     )
     cluster_labels = snv_clusters.with_columns(cluster_label_expr)
 
-    _validate_cluster_labels(cluster_labels)
+    _validate_cluster_labels(cluster_labels,max_fail_fraction)
     return cluster_labels
 
 
@@ -98,14 +98,21 @@ def get_variant_cn(variant_data,sample_cn):
     snv_data = snv_data.filter(pl.col('segment_end')>=pl.col('position'))
 
     return variant_data.join(snv_data,how='inner',on=['chromosome','position'])
-def load_labelled_variants(somatic_data,min_clonal_cluster:float=0.9,max_multiplicity:int=10):
+def load_labelled_variants(somatic_data):
+    qc = somatic_data.qc
 
     variant_data_with_cn = get_variant_cn(somatic_data.sample_variants,somatic_data.sample_copy_number)
     variant_data = somatic_data.sample_variants.join(variant_data_with_cn,on=['chromosome','position'],how='inner')
-    cluster_labels = label_snv_clusters(somatic_data.snv_clusters,min_clonal_cluster=min_clonal_cluster)
+    cluster_labels = label_snv_clusters(
+        somatic_data.snv_clusters,
+        min_clonal_cluster=qc.min_clonal_cluster,
+        max_clonal_cluster=qc.max_clonal_cluster,
+        min_clonal_fraction=qc.min_clonal_fraction,
+        max_fail_fraction=qc.max_fail_fraction,
+    )
 
     if somatic_data.snv_cluster_assignments is None:
-        snv_cluster_assignments = get_snv_cluster_assignments_binomial(cluster_labels,variant_data_with_cn,min_clonal_ccf=min_clonal_cluster,max_multiplicity=max_multiplicity)
+        snv_cluster_assignments = get_snv_cluster_assignments_binomial(cluster_labels,variant_data_with_cn,min_clonal_ccf=qc.min_clonal_ccf,max_multiplicity=qc.max_multiplicity)
     else:
         snv_cluster_assignments = somatic_data.snv_cluster_assignments
         snv_cluster_assignments = snv_cluster_assignments.join(cluster_labels,how='inner',on=['cluster_id'])

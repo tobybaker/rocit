@@ -2,8 +2,9 @@ import pickle
 import polars as pl
 import numpy as np
 from rocit.preprocessing import snv_data_labeller,loh_data_labeller,prepare_somatic_data,read_labels
+from rocit.preprocessing.qc import QCThresholds
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from rocit.constants import HUMAN_CHROMOSOME_ENUM
 @dataclass
 class ROCITSomaticData:
@@ -16,6 +17,7 @@ class ROCITSomaticData:
     sample_haploblocks:pl.DataFrame
     snv_clusters:pl.DataFrame
     snv_cluster_assignments: pl.DataFrame| None = None
+    qc: QCThresholds = field(default_factory=QCThresholds)
 
     def save(self, path: str):
         """Saves the entire object to disk."""
@@ -50,19 +52,6 @@ def load_methylation_df(in_path):
     in_df = in_df.drop(['strand','read_count','supplementary_alignment'])
     return in_df
 
-def get_subsampled_methylation_data(sample_methylation_dir,subsample_rate=0.05,seed=123456):
-    subsampled_store =[]
-    for in_path in sample_methylation_dir.glob('*_cpg_methylation.parquet'):
-        in_df = load_methylation_df(in_path)
-        read_indices = in_df.select(['chromosome','read_index']).unique().collect()
-        sampled_read_indices = read_indices.sample(fraction=subsample_rate,seed=seed)
-        in_df = in_df.join(sampled_read_indices.lazy(),how='semi',on=['chromosome','read_index'])
-        in_df = in_df.with_columns(pl.lit(False).alias('tumor_read'))
-        subsampled_store.append(in_df)
-    if not subsampled_store:
-        raise FileNotFoundError(f"No methylation parquet files found in {sample_methylation_dir}")
-    return pl.concat(subsampled_store)
-    
 def get_labelled_methylation_data(sample_methylation_dir,read_labels):
     labelled_data_store = []
     read_labels = read_labels.lazy().with_columns(pl.col('chromosome').cast(HUMAN_CHROMOSOME_ENUM),pl.col('read_index').cast(pl.Categorical))

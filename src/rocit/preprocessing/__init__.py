@@ -1,5 +1,7 @@
 from rocit.preprocessing.process_cpg_distribution import get_aggregate_methylation_distribution,get_aggregate_methylation_distribution_from_dir
+from rocit.preprocessing.qc import QCThresholds
 __all__ = [
 "get_aggregate_methylation_distribution",
-"get_aggregate_methylation_distribution_from_dir"
+"get_aggregate_methylation_distribution_from_dir",
+"QCThresholds",
 ]
