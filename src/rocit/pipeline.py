@@ -58,7 +58,21 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     all_chromosomes = read_data.select('chromosome').unique().collect().to_series().to_list()
     non_train_chromosomes = val_chromosomes+test_chromosomes
     train_chromosomes = [chrom for chrom in all_chromosomes if chrom not in non_train_chromosomes]
-    
+
+    present = set(all_chromosomes)
+    for name, chroms in (("val_chromosomes", val_chromosomes),
+                         ("test_chromosomes", test_chromosomes)):
+        missing = set(chroms) - present
+        if missing:
+            raise ValueError(
+                f"{name} not present in labelled data: {sorted(missing)}. "
+                f"Chromosomes available: {sorted(present)}"
+            )
+    if not train_chromosomes:
+        raise ValueError(
+            "No chromosomes remain for training after removing val/test chromosomes."
+        )
+
     sample_source = EmbeddingStore('sample_distribution',sample_distribution,['chromosome','position'])
     cell_map_source = EmbeddingStore('cell_map',cell_atlas,['chromosome','position'])
     
@@ -75,7 +89,12 @@ def get_sample_train_dataset(read_data,sample_distribution,cell_atlas,val_chromo
     test_dataset_builder = ReadDatasetBuilder(test_read_data,label_cols,key_cols,embedding_sources)
     val_dataset_builder = ReadDatasetBuilder(val_read_data,label_cols,key_cols,embedding_sources)
     
-    return ROCITTrainStore(train_dataset_builder.build(cache_dir=cache_dir),val_dataset_builder.build(cache_dir=cache_dir),test_dataset_builder.build(cache_dir=cache_dir),embedding_sources)
+    return ROCITTrainStore(
+        train_dataset_builder.build(cache_dir=cache_dir),
+        val_dataset_builder.build(cache_dir=cache_dir, training=False),
+        test_dataset_builder.build(cache_dir=cache_dir, training=False),
+        embedding_sources,
+    )
 
 def training_wrapper(sample_id:str,
         labelled_data:pl.DataFrame,
@@ -164,7 +183,7 @@ def get_sample_inference_store(
     key_cols = ['read_index']
     
     inference_dataset_builder = ReadDatasetBuilder(read_store,label_cols,key_cols,embedding_sources)
-    inference_dataset = inference_dataset_builder.build(cache_dir=cache_dir)
+    inference_dataset = inference_dataset_builder.build(cache_dir=cache_dir, training=False)
     
     return ROCITInferenceStore(inference_dataset,embedding_sources)
 def predict_wrapper(sample_id:str,

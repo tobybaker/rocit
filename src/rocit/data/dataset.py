@@ -196,6 +196,7 @@ class ReadDatasetBuilder:
         self,
         cache_dir: Optional[str] = '/scratch/',
         num_proc: Optional[int] = None,
+        training: bool = True,
      ):
 
         hf_dataset =  HFDataset.from_generator(
@@ -208,6 +209,7 @@ class ReadDatasetBuilder:
             hf_dataset=hf_dataset,
             label_cols=self.label_cols,
             embedding_index_cols=self.embedding_index_cols,
+            training=training,
         )
     
     
@@ -217,24 +219,28 @@ class ReadDataset(TorchDataset):
     METHYLATION_SCALE = 256.0
     BASE_READ_LENGTH = 20000.0
 
-    def __init__(self, hf_dataset,label_cols,embedding_index_cols,max_len=511):
+    def __init__(self, hf_dataset,label_cols,embedding_index_cols,max_len=511,training=True):
 
         self.hf_dataset = hf_dataset
         self.label_cols = label_cols
         self.embedding_index_cols =embedding_index_cols
         self.max_len = max_len
+        self.training = training
         
 
     def __len__(self) -> int:
         return len(self.hf_dataset)
     
-    def get_downsample_indices(self,seq_len: int):
-        
+    def get_downsample_indices(self,seq_len: int, idx: int):
+
         if seq_len > self.max_len:
-            perm = torch.randperm(seq_len)
+            if self.training:
+                perm = torch.randperm(seq_len)                  # fresh augmentation each epoch
+            else:
+                g = torch.Generator().manual_seed(idx)          # fixed, reproducible per read
+                perm = torch.randperm(seq_len, generator=g)
             downsample_indices = perm[:self.max_len]
             downsample_indices, _ = torch.sort(downsample_indices) # Maintain order
-            #return torch.arange(self.max_len)
             return downsample_indices
         return None
 
@@ -268,7 +274,7 @@ class ReadDataset(TorchDataset):
 
     def __getitem__(self, idx):
         processed_read_data = self.hf_dataset[idx]
-        downsample_indices = self.get_downsample_indices(processed_read_data['n_cpgs'])
+        downsample_indices = self.get_downsample_indices(processed_read_data['n_cpgs'], idx)
         
         attention_mask = self.get_attention_mask(processed_read_data['n_cpgs'],downsample_indices)
 

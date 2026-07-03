@@ -425,8 +425,9 @@ def run(config_path: Path):
     labelled_methylation_data = tumor_data_labeller.get_labelled_methylation_data(
         methylation_dir, labelled_reads
     )
+    labelled_methylation_path = preprocess_dir / "labelled_methylation_data.parquet"
     labelled_reads.write_parquet(preprocess_dir / "labelled_reads.parquet")
-    labelled_methylation_data.write_parquet(preprocess_dir / "labelled_methylation_data.parquet")
+    labelled_methylation_data.sink_parquet(labelled_methylation_path)
 
     # Step 4: Train
     click.echo("[4/5] Training model ...")
@@ -434,7 +435,7 @@ def run(config_path: Path):
     cell_atlas = read_dataframe(cell_atlas_path)
     train_result = training_wrapper(
         sample_id=cfg.sample_id,
-        labelled_data=labelled_methylation_data,
+        labelled_data=pl.scan_parquet(labelled_methylation_path),
         sample_distribution=sample_distribution,
         cell_atlas=cell_atlas,
         val_chromosomes=list(set(cfg.val_chromosomes)),
