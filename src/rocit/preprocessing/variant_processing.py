@@ -12,7 +12,7 @@ def _validate_cluster_labels(cluster_labels:pl.DataFrame,max_fail_fraction:float
 
     unique_cluster_labels = cluster_labels['cluster_label'].unique()
     if not 'pass_clonal' in unique_cluster_labels:
-        raise ClusterValidationError(f'Provided SNVs clusters do not contain a clonal peak')
+        raise ClusterValidationError(f'Provided SNV clusters do not contain a clonal peak')
     fail_clusters = cluster_labels.filter(pl.col('cluster_label')=='fail')
     if fail_clusters['cluster_fraction'].sum()>=max_fail_fraction:
         raise ClusterValidationError(f"{fail_clusters['cluster_fraction'].sum():.1%} of SNVs are in fail cluster. This is more than the permitted {max_fail_fraction:.1%}.")
