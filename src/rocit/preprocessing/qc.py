@@ -1,24 +1,3 @@
-"""Central store of quality-control thresholds for the preprocessing pipeline.
-
-Every QC cutoff used across the preprocessing modules lives here as a single
-frozen ``QCThresholds`` dataclass. The defaults reproduce the historical
-hardcoded behaviour, so casual users (and the CLI) get sensible results with no
-configuration. Advanced users construct a ``QCThresholds`` with overrides and
-pass it into the pipeline directly, e.g.::
-
-    from rocit.preprocessing.qc import QCThresholds
-    from rocit.preprocessing.tumor_data_labeller import (
-        ROCITSomaticData, make_read_labels,
-    )
-
-    qc = QCThresholds(min_variant_reads=5, loh_min_coverage=30)
-    data = ROCITSomaticData(..., qc=qc)
-    labels = make_read_labels(data)
-
-Thresholds are range-validated on construction and raise ``ConfigError`` on
-invalid values.
-"""
-
 from dataclasses import dataclass
 
 from rocit.config import ConfigError

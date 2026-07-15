@@ -36,7 +36,11 @@ def run_phasing_qc(variant_table,min_p_value:float=0.1):
     return True
 
 def run_all_copies_qc(variant_table,min_p_value:float=0.1):
-  
+
+    #non-tumor read inference only holds for clonal variants
+    if variant_table['cluster_label'][0] != 'pass_clonal':
+        return False
+
     purity = variant_table['purity'][0]
     
     variant_haplotype = variant_table.filter(pl.col('contains_snv'))['haplotag'][0]
