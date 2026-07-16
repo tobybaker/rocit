@@ -13,7 +13,7 @@ from rocit.data.datamodule import get_optimal_num_workers
 from rocit.models import ROCITModel
 from pathlib import Path
 
-from typing import List
+from typing import Any, List, Optional
 
 @dataclass(frozen=True)
 class TrainingParams:
@@ -44,6 +44,8 @@ class FinetuneParams:
     gradient_clip_val:float = 1.0
     n_log_steps:int = 50
     probability_threshold:float = 0.5
+    noise_level:Optional[float] = None    # None -> inherit checkpoint's value
+    dropout_rate:Optional[float] = None   # None -> inherit checkpoint's value
 
 @dataclass
 class ROCITTrainStore():
@@ -215,12 +217,20 @@ def finetune(rocit_dataset,base_checkpoint_path,log_dir,experiment_name,finetune
     if finetune_params is None:
         finetune_params = FinetuneParams()
 
-    model = ROCITModel.load_from_checkpoint(
-        base_checkpoint_path,
+    # Architecture hparams are restored from the checkpoint; only override
+    # training-regime knobs. noise_level/dropout_rate inherit the checkpoint's
+    # value unless explicitly set (both are shape-safe to override).
+    overrides: dict[str, Any] = dict(
         lr=finetune_params.learning_rate,
         warmup_steps=finetune_params.warmup_steps,
         threshold=finetune_params.probability_threshold,
     )
+    if finetune_params.noise_level is not None:
+        overrides["noise_level"] = finetune_params.noise_level
+    if finetune_params.dropout_rate is not None:
+        overrides["dropout_rate"] = finetune_params.dropout_rate
+
+    model = ROCITModel.load_from_checkpoint(base_checkpoint_path, **overrides)
 
     return _fit_and_test(model,rocit_dataset,log_dir,experiment_name,finetune_params)
 
