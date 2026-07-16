@@ -34,6 +34,17 @@ class TrainingParams:
     seq_length:int=511
     dropout_rate:float=0.02
 
+@dataclass(frozen=True)
+class FinetuneParams:
+    learning_rate:float = 1e-5        # 10x lower than TrainingParams (1e-4)
+    warmup_steps:int = 50
+    max_epochs:int = 50
+    early_stopping_patience:int = 10
+    batch_size:int = 256
+    gradient_clip_val:float = 1.0
+    n_log_steps:int = 50
+    probability_threshold:float = 0.5
+
 @dataclass
 class ROCITTrainStore():
     train_dataset:ReadDataset
@@ -106,15 +117,32 @@ def training_wrapper(sample_id:str,
         cache_dir:Path):
     rocit_dataset = get_sample_train_dataset(labelled_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes,cache_dir)
     return train(rocit_dataset,output_dir,sample_id)
-    
-def train(rocit_dataset,log_dir,experiment_name,training_params=None):
-    if training_params is None:
-        training_params = TrainingParams()
-    torch.set_float32_matmul_precision('medium') 
-    
+
+def finetune_wrapper(sample_id:str,
+        labelled_data:pl.DataFrame,
+        sample_distribution:pl.DataFrame,
+        cell_atlas:pl.DataFrame,
+        val_chromosomes:List[str],
+        test_chromosomes:List[str],
+        base_checkpoint_path:Path,
+        output_dir:Path,
+        cache_dir:Path,
+        finetune_params=None):
+    rocit_dataset = get_sample_train_dataset(labelled_data,sample_distribution,cell_atlas,val_chromosomes,test_chromosomes,cache_dir)
+    return finetune(rocit_dataset,base_checkpoint_path,output_dir,sample_id,finetune_params)
+
+def _fit_and_test(model,rocit_dataset,log_dir,experiment_name,training_params):
+    """Shared fit/test machinery for train() and finetune().
+
+    ``training_params`` only needs the trainer-level knobs (max_epochs, batch_size,
+    early_stopping_patience, gradient_clip_val, n_log_steps), so both TrainingParams
+    and FinetuneParams are accepted here.
+    """
+    torch.set_float32_matmul_precision('medium')
+
     logger = CSVLogger(
     save_dir=log_dir,
-    name=experiment_name,  
+    name=experiment_name,
     )
 
     early_stopping = EarlyStopping(
@@ -132,21 +160,8 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
 
     data_module = ROCITDataModule(rocit_dataset.train_dataset,rocit_dataset.test_dataset,rocit_dataset.val_dataset,training_params.batch_size)
 
-    warmup_steps = training_params.warmup_steps
-
-    model = ROCITModel(
-    model_dim=training_params.model_dim,
-    model_heads=training_params.model_heads,
-    model_layers=training_params.model_layers,
-    lr=training_params.learning_rate,
-    warmup_steps=warmup_steps,
-    threshold=training_params.probability_threshold,
-    sample_distribution_dim=training_params.sample_distribution_dim,
-    cell_map_dim=training_params.cell_map_dim,
-    noise_level=training_params.noise_level,
-    seq_length=training_params.seq_length,
-    dropout_rate=training_params.dropout_rate
-    )
+    # Required after any model construction/load: embedding tensors live in
+    # non-persistent buffers, so they must be re-bound to this sample's sources.
     model.model.set_embedding_context(rocit_dataset.embedding_sources)
 
     trainer = L.Trainer(
@@ -161,11 +176,53 @@ def train(rocit_dataset,log_dir,experiment_name,training_params=None):
 
     trainer.fit(model, datamodule=data_module)
     trainer.test(model, datamodule=data_module)
-    
+
     best_checkpoint_path = Path(checkpointing.best_model_path)
     log_dir = Path(logger.log_dir)
-    
+
     return ROCITTrainResult(best_checkpoint_path,log_dir)
+
+
+def train(rocit_dataset,log_dir,experiment_name,training_params=None):
+    if training_params is None:
+        training_params = TrainingParams()
+
+    model = ROCITModel(
+    model_dim=training_params.model_dim,
+    model_heads=training_params.model_heads,
+    model_layers=training_params.model_layers,
+    lr=training_params.learning_rate,
+    warmup_steps=training_params.warmup_steps,
+    threshold=training_params.probability_threshold,
+    sample_distribution_dim=training_params.sample_distribution_dim,
+    cell_map_dim=training_params.cell_map_dim,
+    noise_level=training_params.noise_level,
+    seq_length=training_params.seq_length,
+    dropout_rate=training_params.dropout_rate
+    )
+
+    return _fit_and_test(model,rocit_dataset,log_dir,experiment_name,training_params)
+
+
+def finetune(rocit_dataset,base_checkpoint_path,log_dir,experiment_name,finetune_params=None):
+    """Continue training from an existing checkpoint on a new labelled sample.
+
+    Architecture hyperparameters are restored from the checkpoint via
+    ``save_hyperparameters``; only the training-time knobs (lr, warmup, threshold)
+    are overridden. ``load_from_checkpoint`` + ``fit`` loads weights only, giving a
+    fresh optimizer with no resumed optimizer/epoch state.
+    """
+    if finetune_params is None:
+        finetune_params = FinetuneParams()
+
+    model = ROCITModel.load_from_checkpoint(
+        base_checkpoint_path,
+        lr=finetune_params.learning_rate,
+        warmup_steps=finetune_params.warmup_steps,
+        threshold=finetune_params.probability_threshold,
+    )
+
+    return _fit_and_test(model,rocit_dataset,log_dir,experiment_name,finetune_params)
 
 
 def get_sample_inference_store(
